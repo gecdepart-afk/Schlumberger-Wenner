@@ -152,36 +152,17 @@ with col1:
     if ok:
         # Create a figure using matplotlib
         fig, ax = plt.subplots(figsize=(7, 5))
-        from matplotlib.ticker import LogLocator, LogFormatterSciNotation, NullFormatter
-
-        ax.plot(AB2, rho_app, "o-", label="ρₐ (predicted)")
-
-        # Make both axes logarithmic (base 10)
-        ax.set_xscale("log", base=10)
-        ax.set_yscale("log", base=10)
-
-        # --- Make the log scaling obvious ---
-        # Expand to full decades so the grid shows 10^n lines (adjust as you like):
-        ax.set_xlim(AB2.min()*0.9, AB2.max()*1.1)
-        ax.set_ylim(1, 100)         # <- change if your resistivities are far outside this range
- 
-        # Major ticks at 10^n; minor ticks at 2..9 × 10^n
-        ax.xaxis.set_major_locator(LogLocator(base=10.0))
-        ax.xaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1))
-        ax.xaxis.set_minor_formatter(NullFormatter())
-
-        ax.yaxis.set_major_locator(LogLocator(base=10.0))
-        ax.yaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1))
-        ax.yaxis.set_minor_formatter(NullFormatter())
-        ax.yaxis.set_major_formatter(LogFormatterSciNotation(base=10.0))
-
-        # Grid and labels
-        ax.grid(True, which="both", ls=":", alpha=0.7)
+        ax.loglog(AB2, rho_app, "o-", label="ρₐ (predicted)")
+        ax.set_yscale("log")
+        ax.set_xscale("log")
+        ax.grid(True, which="both", ls=":")
         ax.set_xlabel("AB/2 (m)")
         ax.set_ylabel("Apparent resistivity (Ω·m)")
         ax.set_title("Schlumberger VES (forward)")
         ax.legend()
 
+        # Show it inside Streamlit
+        st.pyplot(fig, clear_figure=True)
 
         # Export results as CSV for external plotting (Excel, Python, etc.)
         df_out = pd.DataFrame({
