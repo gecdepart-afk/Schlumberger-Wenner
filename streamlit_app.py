@@ -147,31 +147,34 @@ except Exception as e:
 col1, col2 = st.columns([2, 1])  # layout: wide chart + narrow model panel
 
 # --- LEFT: Apparent resistivity curve ---
-from matplotlib.ticker import LogLocator, LogFormatter
+from matplotlib.ticker import LogLocator, LogFormatter, NullFormatter
 
 with col1:
     st.subheader("Sounding curve (log–log)")
     if ok:
         fig, ax = plt.subplots(figsize=(7, 5))
 
-        # Log–log curve
         ax.loglog(AB2, rho_app, "o-", label="ρₐ (predicted)")
 
-        # ---- Make the log nature obvious on Y ----
-        # Compute decade bounds that bracket your data
-        y_min = rho_app.min()
-        y_max = rho_app.max()
-        y_lo  = 10 ** np.floor(np.log10(y_min))
-        y_hi  = 10 ** np.ceil(np.log10(y_max))
-        ax.set_ylim(y_lo, y_hi)  # expand to full decades automatically
+        # --- Make Y look like X: show labels only at decades (10^n) ---
+        # expand to full decades around your data (optional but helps the look)
+        ymin, ymax = rho_app.min(), rho_app.max()
+        ax.set_ylim(10**np.floor(np.log10(ymin)), 10**np.ceil(np.log10(ymax)))
 
-        # Force decade ticks + minor ticks on the log axis
-        ax.yaxis.set_major_locator(LogLocator(base=10.0))
-        ax.yaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1))
-        ax.yaxis.set_major_formatter(LogFormatter(base=10.0, labelOnlyBase=False))
+        # major ticks only at decades; minor ticks at 2–9
+        ax.yaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
+        ax.yaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2,10)*0.1))
 
-        # (x already log from ax.loglog, but you can also control its ticks similarly if you want)
-        ax.minorticks_on()
+        # label only the decades as 10^n; hide minor labels
+        ax.yaxis.set_major_formatter(LogFormatter(base=10.0, labelOnlyBase=True))
+        ax.yaxis.set_minor_formatter(NullFormatter())
+
+        # (do the same for X if you want identical style there too)
+        ax.xaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
+        ax.xaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2,10)*0.1))
+        ax.xaxis.set_major_formatter(LogFormatter(base=10.0, labelOnlyBase=True))
+        ax.xaxis.set_minor_formatter(NullFormatter())
+
         ax.grid(True, which="both", ls=":", alpha=0.7)
 
         ax.set_xlabel("AB/2 (m)")
