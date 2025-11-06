@@ -1,151 +1,226 @@
-import streamlit as st
-import pandas as pd
-import math
-from pathlib import Path
+# ==============================
+# 1D DC Forward Modelling (SimPEG)
+# Streamlit app — Schlumberger only, user edits AB/2 only
+# ==============================
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
+# --- Core scientific libraries ---
+import numpy as np                    # numerical arrays & math (efficient vector operations)
+import pandas as pd                   # tabular data handling (for model table + CSV export)
+import matplotlib.pyplot as plt       # plotting library for charts and model visualization
+import streamlit as st                # Streamlit: web UI framework for Python (interactive apps)
+
+# --- SimPEG modules for DC resistivity ---
+from simpeg.electromagnetics.static import resistivity as dc  # SimPEG DC resistivity subpackage
+from simpeg import maps               # “maps” connect model parameters to physical quantities
+
+# ---------------------------
+# 1) PAGE SETUP & HEADER
+# ---------------------------
+
+# Configure the web app: title, icon, and layout
+st.set_page_config(page_title="1D DC Forward (SimPEG)", page_icon="🪪", layout="wide")
+
+# Title and description displayed at the top of the app
+st.title("1D DC Resistivity — Forward Modelling (Schlumberger)")
+st.markdown(
+    "Configure a layered Earth and **AB/2** geometry, then compute the **apparent resistivity** curve. "
+    "Uses `simpeg.electromagnetics.static.resistivity.simulation_1d.Simulation1DLayers`."
 )
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
+# ==============================================================
+# 2) SIDEBAR — INPUT PARAMETERS (geometry and layer model)
+# ==============================================================
 
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+with st.sidebar:   # everything inside here appears in the Streamlit sidebar
+    st.header("Geometry (Schlumberger)")
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
+    # --- AB/2 range controls (geometry setup) ---
+    # Two side-by-side numeric inputs: minimum and maximum AB/2 electrode spacing
+    colA1, colA2 = st.columns(2)
+    with colA1:
+        ab2_min = st.number_input("AB/2 min (m)", min_value=0.1, value=5.0, step=0.1, format="%.2f")
+    with colA2:
+        ab2_max = st.number_input("AB/2 max (m)", min_value=ab2_min + 0.1, value=300.0, step=1.0, format="%.2f")
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+    # Number of measurement stations between AB2_min and AB2_max
+    n_stations = st.slider("Number of stations", min_value=8, max_value=60, value=25, step=1)
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+    # Fix MN/2 to a standard ratio (10% of AB/2)
+    st.caption("MN/2 is set automatically to 10% of AB/2 (and clipped to < 0.5·AB/2).")
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
+    st.divider()
+    st.header("Layers")
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
+    # --- Layer parameters (resistivity + thickness) ---
+    # Choose number of layers (3–5). The last one is the infinite half-space.
+    n_layers = st.slider("Number of layers", 3, 5, 4, help="Total layers (last layer is a half-space).")
 
-    return gdp_df
+    # Default layer resistivities and thicknesses (editable)
+    default_rho = [10.0, 30.0, 15.0, 50.0, 100.0][:n_layers]
+    default_thk = [2.0, 8.0, 60.0, 120.0][:max(0, n_layers - 1)]
 
-gdp_df = get_gdp_data()
-
-# -----------------------------------------------------------------------------
-# Draw the actual page
-
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
-
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
-
-# Add some spacing
-''
-''
-
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
-
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
-
-countries = gdp_df['Country Code'].unique()
-
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
-
-''
-''
-
-
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
-
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
-
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
+    # Resistivity input per layer
+    layer_rhos = []
+    for i in range(n_layers):
+        layer_rhos.append(
+            st.number_input(f"ρ Layer {i+1} (Ω·m)", min_value=0.1, value=float(default_rho[i]), step=0.1)
         )
+
+    # Thickness input for the top N−1 layers (the last layer has infinite thickness)
+    thicknesses = []
+    if n_layers > 1:
+        st.caption("Thicknesses for the **upper** N−1 layers (last layer is half-space):")
+        for i in range(n_layers - 1):
+            thicknesses.append(
+                st.number_input(f"Thickness L{i+1} (m)", min_value=0.1, value=float(default_thk[i]), step=0.1)
+            )
+
+# Convert thickness list to numpy array (SimPEG expects NumPy arrays, not Python lists)
+thicknesses = np.r_[thicknesses] if len(thicknesses) else np.array([])
+
+st.divider()
+
+# ==============================================================
+# 3) BUILD SURVEY GEOMETRY (AB/2, MN/2 positions)
+# ==============================================================
+
+# Create logarithmically spaced AB/2 electrode spacings (common in field surveys)
+AB2 = np.geomspace(ab2_min, ab2_max, n_stations)
+
+# Define MN/2 spacing automatically (10% of AB/2, limited to avoid overlap)
+MN2 = np.minimum(0.10 * AB2, 0.49 * AB2)
+
+# Small offset epsilon avoids the situation where M = A or N = B (which breaks math)
+eps = 1e-6
+
+# Prepare SimPEG “sources” — one per station
+# Each source defines:
+#  - A and B (current electrodes)
+#  - one receiver (M–N dipole measuring potential)
+src_list = []
+for L, a in zip(AB2, MN2):
+    # Positions of electrodes along the x-axis (y,z = 0)
+    A = np.r_[-L, 0.0, 0.0]
+    B = np.r_[ +L, 0.0, 0.0]
+    M = np.r_[ -(a - eps), 0.0, 0.0]
+    N = np.r_[ +(a - eps), 0.0, 0.0]
+
+    # Receiver measures apparent resistivity directly
+    rx = dc.receivers.Dipole(M, N, data_type="apparent_resistivity")
+
+    # Source = AB current dipole carrying this receiver
+    src = dc.sources.Dipole([rx], A, B)
+    src_list.append(src)
+
+# Create the SimPEG survey object from all sources
+survey = dc.Survey(src_list)
+
+# ==============================================================
+# 4) SIMULATION & FORWARD MODELLING
+# ==============================================================
+
+# Convert the list of user-defined resistivities into a NumPy array
+rho = np.r_[layer_rhos]
+
+# “IdentityMap” tells SimPEG that model parameters are already in resistivity units
+rho_map = maps.IdentityMap(nP=len(rho))
+
+# Create a 1D layered-earth DC resistivity simulation
+sim = dc.simulation_1d.Simulation1DLayers(
+    survey=survey,           # measurement geometry
+    rhoMap=rho_map,          # how model is interpreted
+    thicknesses=thicknesses  # array of thicknesses for upper layers
+)
+
+# Run forward simulation: compute apparent resistivity ρa for each AB/2
+try:
+    rho_app = sim.dpred(rho)   # dpred = “data predicted” by forward model
+    ok = True
+except Exception as e:
+    ok = False
+    st.error(f"Forward modelling failed: {e}")
+
+# ==============================================================
+# 5) DISPLAY RESULTS — curve, model, and data table
+# ==============================================================
+
+col1, col2 = st.columns([2, 1])  # layout: wide chart + narrow model panel
+
+# --- LEFT: Apparent resistivity curve ---
+with col1:
+    st.subheader("Sounding curve (log–log)")
+    if ok:
+        # Create a figure using matplotlib
+        fig, ax = plt.subplots(figsize=(7, 5))
+        ax.loglog(AB2, rho_app, "o-", label="ρₐ (predicted)")
+        ax.grid(True, which="both", ls=":")
+        ax.set_xlabel("AB/2 (m)")
+        ax.set_ylabel("Apparent resistivity (Ω·m)")
+        ax.set_title("Schlumberger VES (forward)")
+        ax.legend()
+
+        # Show it inside Streamlit
+        st.pyplot(fig, clear_figure=True)
+
+        # Export results as CSV for external plotting (Excel, Python, etc.)
+        df_out = pd.DataFrame({
+            "AB/2 (m)": AB2,
+            "MN/2 (m)": MN2,
+            "Apparent resistivity (ohm·m)": rho_app,
+        })
+        st.download_button(
+            "⬇️ Download synthetic data (CSV)",
+            data=df_out.to_csv(index=False).encode("utf-8"),
+            file_name="synthetic_VES.csv",
+            mime="text/csv",
+        )
+
+# --- RIGHT: Layered model visualization ---
+with col2:
+    st.subheader("Layered model")
+    if ok:
+        # “Block model” diagram: resistivity vs. depth
+        fig2, ax2 = plt.subplots(figsize=(4, 5))
+        rho_vals = rho
+
+        # Compute depth interfaces from thicknesses
+        if len(thicknesses):
+            interfaces = np.r_[0.0, np.cumsum(thicknesses)]
+        else:
+            interfaces = np.r_[0.0]
+
+        # Add bottom depth for plotting last half-space
+        z_bottom = interfaces[-1] + max(interfaces[-1] * 0.3, 10.0)
+
+        # Draw one filled rectangle per layer
+        tops = np.r_[interfaces, interfaces[-1]]
+        bottoms = np.r_[interfaces[1:], z_bottom]
+        for i in range(n_layers):
+            ax2.fill_betweenx([tops[i], bottoms[i]], 0, rho_vals[i], alpha=0.35)
+            ax2.text(rho_vals[i] * 1.05, (tops[i] + bottoms[i]) / 2,
+                     f"{rho_vals[i]:.1f} Ω·m", va="center", fontsize=9)
+
+        ax2.invert_yaxis()               # depth increases downward
+        ax2.set_xlabel("Resistivity (Ω·m)")
+        ax2.set_ylabel("Depth (m)")
+        ax2.grid(True, ls=":")
+        ax2.set_title("Block model")
+        st.pyplot(fig2, clear_figure=True)
+
+    # Display the same model as a table
+    model_df = pd.DataFrame({
+        "Layer": np.arange(1, n_layers + 1),
+        "Resistivity (Ω·m)": rho,
+        "Thickness (m)": [*thicknesses, np.nan],  # NaN for last layer (half-space)
+        "Note": [""] * (n_layers - 1) + ["Half-space"]
+    })
+    st.dataframe(model_df, use_container_width=True)
+
+# ==============================================================
+# 6) FOOTNOTE — teaching notes
+# ==============================================================
+
+st.caption(
+    "Notes: MN/2 is fixed to 10% of AB/2 (and clipped below 0.5·AB/2) to avoid numerical issues. "
+    "If you see instabilities at extreme geometries, reduce AB/2 range."
+)
