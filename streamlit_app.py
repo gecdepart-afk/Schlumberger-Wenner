@@ -1,290 +1,222 @@
 # ==============================
-# 1D DC Forward Modelling (SimPEG)
-# Streamlit app — Schlumberger & Wenner + simple sensitivity curves
+# 2D DC Forward Modelling (SimPEG)
+# Streamlit app — simple dipole–dipole pseudosection
 # ==============================
 
-# --- Core scientific libraries ---
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
 
-# --- SimPEG modules for DC resistivity ---
+from discretize import TensorMesh
 from simpeg.electromagnetics.static import resistivity as dc
 from simpeg import maps
 
 # ---------------------------
-# 1) PAGE SETUP & HEADER
+# 1) PAGE SETUP
 # ---------------------------
 
-st.set_page_config(page_title="1D DC Forward (SimPEG)", page_icon="🪪", layout="wide")
-
-st.title("1D DC Resistivity — Schlumberger & Wenner")
+st.set_page_config(page_title="2D DC Forward (SimPEG)", page_icon="🌍", layout="wide")
+st.title("2D DC Resistivity – dipole–dipole forward modelling (SimPEG)")
 st.markdown(
-    "Configure a layered Earth and **AB/2** geometry, then compute the **apparent resistivity** "
-    "curves for **Schlumberger** and **Wenner** arrays.\n\n"
-    "Uses `simpeg.electromagnetics.static.resistivity.simulation_1d.Simulation1DLayers`."
+    "Simple 2D model: background + rectangular anomaly, dipole–dipole line, "
+    "forward modelled with SimPEG and plotted as a pseudosection."
 )
 
-# ==============================================================
-# 2) SIDEBAR — INPUT PARAMETERS (geometry and layer model)
-# ==============================================================
+# ---------------------------
+# 2) SIDEBAR – MODEL & SURVEY
+# ---------------------------
 
 with st.sidebar:
-    st.header("Geometry (Schlumberger)")
+    st.header("Model parameters")
 
-    colA1, colA2 = st.columns(2)
-    with colA1:
-        ab2_min = st.number_input("AB/2 min (m)", min_value=0.1, value=5.0, step=0.1, format="%.2f")
-    with colA2:
-        ab2_max = st.number_input("AB/2 max (m)", min_value=ab2_min + 0.1, value=300.0, step=1.0, format="%.2f")
+    rho_bg = st.number_input("Background resistivity ρ_bg (Ω·m)", min_value=1.0, value=100.0, step=10.0)
+    rho_block = st.number_input("Block resistivity ρ_block (Ω·m)", min_value=1.0, value=10.0, step=5.0)
 
-    n_stations = st.slider("Number of stations", min_value=8, max_value=60, value=25, step=1)
-
-    st.caption("MN/2 (Schl.) is set automatically to 10% of AB/2 (and clipped to < 0.5·AB/2).")
+    st.markdown("**Block position (x in m, z positive downward)**")
+    block_xmin = st.number_input("Block x_min (m)", value=-20.0, step=5.0)
+    block_xmax = st.number_input("Block x_max (m)", value=20.0, step=5.0)
+    block_zmin = st.number_input("Block top depth (m)", value=5.0, step=1.0)
+    block_zmax = st.number_input("Block bottom depth (m)", value=25.0, step=1.0)
 
     st.divider()
-    st.header("Layers")
+    st.header("Survey geometry")
 
-    n_layers = st.slider("Number of layers", 3, 5, 4, help="Total layers (last layer is a half-space).")
+    line_length = st.number_input("Line length (m)", min_value=20.0, value=100.0, step=10.0)
+    n_electrodes = st.slider("Number of electrodes", min_value=16, max_value=72, value=32, step=4)
+    a_factor = st.slider("Dipole separation a (in electrode spacings)", 1, 3, 1)
+    n_spacing = st.slider("n-spacing (dipole–dipole)", 1, 6, 3)
 
-    default_rho = [10.0, 30.0, 15.0, 50.0, 100.0][:n_layers]
-    default_thk = [2.0, 8.0, 60.0, 120.0][:max(0, n_layers - 1)]
+    st.caption(
+        "Dipole–dipole along a straight line at z=0. "
+        "A–B is one dipole, M–N another; n controls separation between dipoles."
+    )
 
-    layer_rhos = []
-    for i in range(n_layers):
-        layer_rhos.append(
-            st.number_input(f"ρ Layer {i+1} (Ω·m)", min_value=0.1, value=float(default_rho[i]), step=0.1)
-        )
+# ---------------------------
+# 3) BUILD 2D MESH & MODEL
+# ---------------------------
 
-    thicknesses = []
-    if n_layers > 1:
-        st.caption("Thicknesses for the **upper** N−1 layers (last layer is half-space):")
-        for i in range(n_layers - 1):
-            thicknesses.append(
-                st.number_input(f"Thickness L{i+1} (m)", min_value=0.1, value=float(default_thk[i]), step=0.1)
-            )
+# horizontal electrodes from -L/2 to +L/2
+x_electrodes = np.linspace(-line_length / 2.0, line_length / 2.0, n_electrodes)
+z_electrodes = np.zeros_like(x_electrodes)
 
-# Convert thickness list to numpy array (SimPEG expects NumPy arrays, not Python lists)
-thicknesses = np.r_[thicknesses] if len(thicknesses) else np.array([])
+# 2D mesh: x (horizontal), z (vertical, positive down)
+# make it a bit wider and deeper than the electrode line
+domain_width = line_length * 1.5
+domain_depth = line_length  # depth extent
 
-st.divider()
+nx = 80
+nz = 40
+hx = np.ones(nx) * (domain_width / nx)
+hz = np.ones(nz) * (domain_depth / nz)
 
-# ==============================================================
-# 3) BUILD SURVEY GEOMETRY (AB/2, MN/2 positions)
-# ==============================================================
+# origin at left, top = z=0
+mesh = TensorMesh([hx, hz], x0=(-domain_width / 2.0, -domain_depth))
 
-AB2 = np.geomspace(ab2_min, ab2_max, n_stations)
-MN2 = np.minimum(0.10 * AB2, 0.49 * AB2)   # Schlumberger MN/2
-eps = 1e-6
+# build resistivity model: background + rectangular block
+rho_model = rho_bg * np.ones(mesh.nC)
 
-# --- Schlumberger survey ---
-src_list_s = []
-for L, a in zip(AB2, MN2):
-    A_s = np.r_[-L, 0.0, 0.0]
-    B_s = np.r_[+L, 0.0, 0.0]
-    M_s = np.r_[-(a - eps), 0.0, 0.0]
-    N_s = np.r_[+(a - eps), 0.0, 0.0]
+xc, zc = mesh.cell_centers[:, 0], mesh.cell_centers[:, 1]  # zc is negative downwards
 
-    rx_s = dc.receivers.Dipole(M_s, N_s, data_type="apparent_resistivity")
-    src_s = dc.sources.Dipole([rx_s], A_s, B_s)
-    src_list_s.append(src_s)
+# convert block z (positive down) to mesh coords (negative)
+z_block_top = -block_zmin
+z_block_bottom = -block_zmax
 
-survey_s = dc.Survey(src_list_s)
-
-# --- Wenner survey ---
-src_list_w = []
-for L in AB2:
-    # AB = 2L ; Wenner spacing a = AB/3 = 2L/3
-    a = (2.0 * L) / 3.0
-    A_w = np.r_[-1.5 * a, 0.0, 0.0]
-    M_w = np.r_[-0.5 * a, 0.0, 0.0]
-    N_w = np.r_[+0.5 * a, 0.0, 0.0]
-    B_w = np.r_[+1.5 * a, 0.0, 0.0]
-
-    rx_w = dc.receivers.Dipole(M_w, N_w, data_type="apparent_resistivity")
-    src_w = dc.sources.Dipole([rx_w], A_w, B_w)
-    src_list_w.append(src_w)
-
-survey_w = dc.Survey(src_list_w)
-
-# ==============================================================
-# 4) SIMULATION & FORWARD MODELLING
-# ==============================================================
-
-rho = np.r_[layer_rhos]
-rho_map = maps.IdentityMap(nP=len(rho))
-
-sim_s = dc.simulation_1d.Simulation1DLayers(
-    survey=survey_s,
-    rhoMap=rho_map,
-    thicknesses=thicknesses,
+in_block = (
+    (xc >= block_xmin)
+    & (xc <= block_xmax)
+    & (zc <= z_block_top)
+    & (zc >= z_block_bottom)
 )
 
-sim_w = dc.simulation_1d.Simulation1DLayers(
-    survey=survey_w,
-    rhoMap=rho_map,
-    thicknesses=thicknesses,
-)
+rho_model[in_block] = rho_block
 
+rho_map = maps.IdentityMap(nP=mesh.nC)
+
+# ---------------------------
+# 4) BUILD DIPOLE–DIPOLE SURVEY
+# ---------------------------
+
+src_list = []
+midpoints = []
+separations = []
+
+# electrode spacing (assumed uniform)
+dx = x_electrodes[1] - x_electrodes[0]
+a = a_factor * dx
+
+# we treat electrodes as indexed positions but use their actual x coords
+# A at i, B at i+1 ; M at i+1+n_spacing, N at i+2+n_spacing
+for iA in range(n_electrodes):
+    iB = iA + 1
+    iM = iA + 1 + n_spacing
+    iN = iA + 2 + n_spacing
+
+    if iN >= n_electrodes:
+        break
+
+    A = np.r_[x_electrodes[iA], 0.0, 0.0]
+    B = np.r_[x_electrodes[iB], 0.0, 0.0]
+    M = np.r_[x_electrodes[iM], 0.0, 0.0]
+    N = np.r_[x_electrodes[iN], 0.0, 0.0]
+
+    rx = dc.receivers.Dipole(M, N, data_type="apparent_resistivity")
+    src = dc.sources.Dipole([rx], A, B)
+    src_list.append(src)
+
+    midpoints.append(0.5 * (M[0] + N[0]))
+    separations.append(abs(N[0] - M[0]))
+
+midpoints = np.array(midpoints)
+separations = np.array(separations)
+
+survey = dc.Survey(src_list)
+
+# ---------------------------
+# 5) SIMULATION & FORWARD
+# ---------------------------
+
+# NOTE: depending on SimPEG version, change Simulation2DNodal to:
+# - dc.Simulation2DNodal
+# - or dc.Simulation2DCellCentered
+# - or dc.Problem2D_CC (older API)
 try:
-    rho_app_s = sim_s.dpred(rho)
-    rho_app_w = sim_w.dpred(rho)
+    sim = dc.Simulation2DNodal(
+        mesh=mesh,
+        survey=survey,
+        rhoMap=rho_map,
+    )
+
+    data = sim.dpred(rho_model)
     ok = True
 except Exception as e:
     ok = False
     st.error(f"Forward modelling failed: {e}")
 
+# ---------------------------
+# 6) DISPLAY: MODEL + PSEUDOSECTION
+# ---------------------------
 
-# finite-difference sensitivity for one datum
-def compute_normalized_sensitivity(sim, rho, station_index, rel_perturb=0.01):
-    """
-    Very simple 'teaching' sensitivity:
-    - perturb each layer resistivity by +1 %
-    - compute change in a single datum (station_index)
-    - take absolute value and normalise so max = 1
-    """
-    base = sim.dpred(rho)
-    n_layers = len(rho)
-    sens = np.zeros(n_layers)
+col1, col2 = st.columns([1.2, 1.8])
 
-    for j in range(n_layers):
-        rho_pert = rho.copy()
-        rho_pert[j] *= (1.0 + rel_perturb)
-        d_pert = sim.dpred(rho_pert)
-        sens[j] = d_pert[station_index] - base[station_index]
-
-    sens = np.abs(sens)
-    if sens.max() > 0:
-        sens = sens / sens.max()
-    return sens
-
-
-# ==============================================================
-# 5) DISPLAY RESULTS — curves, model, sensitivity and data table
-# ==============================================================
-
-col1, col2 = st.columns([2, 1])
-
-# --- LEFT: Apparent resistivity curves ---
 with col1:
-    st.subheader("Sounding curves (log–log)")
-    if ok:
-        fig, ax = plt.subplots(figsize=(7, 5))
-        ax.loglog(AB2, rho_app_s, "o-", label="Schlumberger")
-        ax.loglog(AB2, rho_app_w, "s--", label="Wenner")
-        ax.grid(True, which="both", ls=":")
-        ax.set_xlabel("AB/2 (m)")
-        ax.set_ylabel("Apparent resistivity (Ω·m)")
-        ax.set_title("VES forward curves")
-        ax.legend()
-        st.pyplot(fig, clear_figure=True)
+    st.subheader("Resistivity model (2D)")
 
-        df_out = pd.DataFrame({
-            "AB/2 (m)": AB2,
-            "MN/2 Schl (m)": MN2,
-            "ρa Schl (ohm·m)": rho_app_s,
-            "ρa Wenner (ohm·m)": rho_app_w,
-        })
-        st.download_button(
-            "⬇️ Download synthetic data (CSV)",
-            data=df_out.to_csv(index=False).encode("utf-8"),
-            file_name="synthetic_VES_schl_wenner.csv",
-            mime="text/csv",
-        )
+    fig_m, ax_m = plt.subplots(figsize=(4, 5))
+    # plot log10 resistivity for contrast
+    m_img = ax_m.tripcolor(
+        xc, zc, np.log10(rho_model),
+        shading="gouraud"
+    )
+    ax_m.invert_yaxis()
+    ax_m.set_xlabel("x (m)")
+    ax_m.set_ylabel("z (m, positive down)")
+    ax_m.set_title("log10(ρ) model")
+    fig_m.colorbar(m_img, ax=ax_m, label="log10(ρ / Ω·m)")
+    st.pyplot(fig_m, clear_figure=True)
 
-# --- RIGHT: Layered model visualization ---
+    st.caption(
+        "Background + rectangular anomaly. "
+        "You can change ρ_bg, ρ_block and block size/position in the sidebar."
+    )
+
 with col2:
-    st.subheader("Layered model")
+    st.subheader("Dipole–dipole apparent resistivity pseudosection")
+
     if ok:
-        fig2, ax2 = plt.subplots(figsize=(4, 5))
-        rho_vals = rho
+        # simple pseudosection: x = midpoint; pseudo-depth = separation / 2
+        pseudo_depth = separations / 2.0
 
-        if len(thicknesses):
-            interfaces = np.r_[0.0, np.cumsum(thicknesses)]
-        else:
-            interfaces = np.r_[0.0]
+        fig_d, ax_d = plt.subplots(figsize=(7, 5))
+        sc = ax_d.scatter(
+            midpoints,
+            pseudo_depth,
+            c=data,
+            cmap="viridis",
+            s=60,
+            edgecolors="k"
+        )
+        ax_d.invert_yaxis()
+        ax_d.set_xlabel("Midpoint (m)")
+        ax_d.set_ylabel("Pseudo-depth (m)")
+        ax_d.set_title("Apparent resistivity (dipole–dipole)")
+        fig_d.colorbar(sc, ax=ax_d, label="ρ_a (Ω·m)")
+        ax_d.grid(True, linestyle=":", alpha=0.5)
 
-        z_bottom = interfaces[-1] + max(interfaces[-1] * 0.3, 10.0)
+        st.pyplot(fig_d, clear_figure=True)
 
-        tops = np.r_[interfaces, interfaces[-1]]
-        bottoms = np.r_[interfaces[1:], z_bottom]
-        for i in range(n_layers):
-            ax2.fill_betweenx([tops[i], bottoms[i]], 0, rho_vals[i], alpha=0.35)
-            ax2.text(rho_vals[i] * 1.05, (tops[i] + bottoms[i]) / 2,
-                     f"{rho_vals[i]:.1f} Ω·m", va="center", fontsize=9)
-
-        ax2.invert_yaxis()
-        ax2.set_xlabel("Resistivity (Ω·m)")
-        ax2.set_ylabel("Depth (m)")
-        ax2.grid(True, ls=":")
-        ax2.set_title("Block model")
-        st.pyplot(fig2, clear_figure=True)
-
-    model_df = pd.DataFrame({
-        "Layer": np.arange(1, n_layers + 1),
-        "Resistivity (Ω·m)": rho,
-        "Thickness (m)": [*thicknesses, np.nan],  # NaN for last layer (half-space)
-        "Note": [""] * (n_layers - 1) + ["Half-space"]
-    })
-    st.dataframe(model_df, use_container_width=True)
-
-# --------------------------------------------------------------
-# SENSITIVITY PLOT SECTION
-# --------------------------------------------------------------
-st.divider()
-st.subheader("Simple sensitivity curve (per datum)")
-
-if ok:
-    colA, colB = st.columns(2)
-    with colA:
-        array_choice = st.selectbox("Array", ["Schlumberger", "Wenner"])
-    with colB:
-        idx_default = len(AB2) // 2
-        station_index = st.slider(
-            "Station index (0 = smallest AB/2)",
-            0, len(AB2) - 1, idx_default,
+        st.caption(
+            "Pseudosection: each symbol corresponds to one dipole–dipole measurement. "
+            "Vertical axis is a pseudo-depth (proportional to dipole separation), "
+            "not a true inversion."
         )
 
-    # <<< NEW: show AB/2 for selected station >>>
-    selected_ab2 = AB2[station_index]
-    st.caption(f"Selected station: #{station_index} – AB/2 = {selected_ab2:.2f} m")
+# ---------------------------
+# 7) NOTES
+# ---------------------------
 
-    if array_choice == "Schlumberger":
-        sens = compute_normalized_sensitivity(sim_s, rho, station_index)
-    else:
-        sens = compute_normalized_sensitivity(sim_w, rho, station_index)
-
-    # build depth centres for each layer (tops/bottoms same length)
-    if len(thicknesses):
-        cum_thk = np.cumsum(thicknesses)           # len = n_layers-1
-        interfaces = np.r_[0.0, cum_thk]           # len = n_layers
-        z_last = interfaces[-1]
-        z_bottom = z_last + max(z_last * 0.3, 10.0)
-
-        tops_layers = interfaces                   # len = n_layers
-        bottoms_layers = np.r_[cum_thk, z_bottom]  # len = n_layers
-    else:
-        tops_layers = np.array([0.0])
-        bottoms_layers = np.array([10.0])
-
-    z_centres = 0.5 * (tops_layers + bottoms_layers)
-
-    fig3, ax3 = plt.subplots(figsize=(5, 4))
-    ax3.plot(sens, z_centres, "o-")
-    ax3.invert_yaxis()
-    ax3.set_xlabel("Relative sensitivity (normalised)")
-    ax3.set_ylabel("Depth (m)")
-    ax3.grid(True, ls=":")
-    ax3.set_title(f"Sensitivity of datum #{station_index} ({array_choice})")
-    st.pyplot(fig3, clear_figure=True)
-
-# ==============================================================
-# 6) FOOTNOTE — teaching notes
-# ==============================================================
-
+st.divider()
 st.caption(
-    "MN/2 is fixed to 10% of AB/2 for the Schlumberger array. "
-    "Sensitivity curves are simple finite-difference approximations, normalised so that the most "
-    "influential layer for a given datum has sensitivity = 1."
+    "This app uses a 2D TensorMesh with a simple dipole–dipole line. "
+    "It only does forward modelling (no inversion). For teaching, you can compare the "
+    "true model (left) with the apparent-resistivity pseudosection (right)."
 )
