@@ -57,7 +57,7 @@ with st.sidebar:
 
 # horizontal electrodes from -L/2 to +L/2
 x_electrodes = np.linspace(-line_length / 2.0, line_length / 2.0, n_electrodes)
-z_electrodes = np.zeros_like(x_electrodes)  # not directly used but conceptually z=0
+z_electrodes = np.zeros_like(x_electrodes)  # conceptually z=0
 
 # 2D mesh: x (horizontal), z (vertical, positive down in physical sense, negative in mesh coords)
 domain_width = line_length * 1.5
@@ -101,7 +101,7 @@ separations = []
 
 # electrode spacing (assumed uniform)
 dx = x_electrodes[1] - x_electrodes[0]
-a = a_factor * dx  # (not explicitly used in geometry here, but OK conceptually)
+a = a_factor * dx  # conceptual only here
 
 # A at i, B at i+1 ; M at i+1+n_spacing, N at i+2+n_spacing
 for iA in range(n_electrodes):
@@ -112,7 +112,7 @@ for iA in range(n_electrodes):
     if iN >= n_electrodes:
         break
 
-    # <<< IMPORTANT FIX: 2D coordinates (x, z) instead of 3D (x, y, z) >>>
+    # 2D coordinates (x, z) for a 2D simulation
     A = np.r_[x_electrodes[iA], 0.0]
     B = np.r_[x_electrodes[iB], 0.0]
     M = np.r_[x_electrodes[iM], 0.0]
@@ -130,6 +130,9 @@ separations = np.array(separations)
 
 survey = dc.Survey(src_list)
 
+# <<< NEW: compute geometric factor K for apparent resistivity >>>
+survey.set_geometric_factor(space_type="halfspace")
+
 # ---------------------------
 # 5) SIMULATION & FORWARD
 # ---------------------------
@@ -145,7 +148,7 @@ try:
         rhoMap=rho_map,
     )
 
-    data = sim.dpred(rho_model)
+    data = sim.dpred(rho_model)  # here "data" are apparent resistivities, since we set data_type + K
     ok = True
 except Exception as e:
     ok = False
@@ -215,6 +218,7 @@ with col2:
 st.divider()
 st.caption(
     "This app uses a 2D TensorMesh with a simple dipole–dipole line. "
-    "It only does forward modelling (no inversion). For teaching, you can compare the "
-    "true model (left) with the apparent-resistivity pseudosection (right)."
+    "We set `data_type='apparent_resistivity'` on the receiver and call "
+    "`survey.set_geometric_factor()` so SimPEG converts voltages to ρₐ "
+    "using the half-space geometric factor."
 )
