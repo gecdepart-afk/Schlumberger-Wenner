@@ -141,8 +141,8 @@ with col1:
         ax.loglog(AB2, rho_app, "o-", label="Model 1")
 
         # combine ranges of both models for nice frame
-        ymin = min(rho_app_1.min(), rho_app_2.min())
-        ymax = max(rho_app_1.max(), rho_app_2.max())
+        ymin = min(rho_app.min())
+        ymax = max(rho_app.max())
         ax.set_ylim(10**np.floor(np.log10(ymin)), 10**np.ceil(np.log10(ymax)))
 
         ax.yaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
@@ -168,8 +168,7 @@ with col1:
         df_out = pd.DataFrame({
             "AB/2 (m)": AB2,
             "MN/2 (m)": MN2,
-            "AppRes Model 1 (Ω·m)": rho_app_1,
-            "AppRes Model 2 (Ω·m)": rho_app_2,
+            "AppRes Model 1 (Ω·m)": rho_app,
         })
         st.download_button(
             "⬇️ Download synthetic data (CSV)",
@@ -183,21 +182,21 @@ with col2:
     st.subheader("Layered model (Model 1)")
     if ok:
         fig2, ax2 = plt.subplots(figsize=(4, 5))
-        rho_vals_1 = rho_1
+        rho_vals = rho
 
-        if len(thicknesses_1):
-            interfaces_1 = np.r_[0.0, np.cumsum(thicknesses_1)]
+        if len(thicknesses):
+            interfaces = np.r_[0.0, np.cumsum(thicknesses)]
         else:
-            interfaces_1 = np.r_[0.0]
+            interfaces = np.r_[0.0]
 
-        z_bottom_1 = interfaces_1[-1] + max(interfaces_1[-1] * 0.3, 10.0)
+        z_bottom = interfaces[-1] + max(interfaces[-1] * 0.3, 10.0)
 
-        tops_1 = np.r_[interfaces_1, interfaces_1[-1]]
-        bottoms_1 = np.r_[interfaces_1[1:], z_bottom_1]
+        tops = np.r_[interfaces, interfaces[-1]]
+        bottoms = np.r_[interfaces[1:], z_bottom]
         for i in range(n_layers):
-            ax2.fill_betweenx([tops_1[i], bottoms_1[i]], 0, rho_vals_1[i], alpha=0.35)
-            ax2.text(rho_vals_1[i] * 1.05, (tops_1[i] + bottoms_1[i]) / 2,
-                     f"{rho_vals_1[i]:.1f} Ω·m", va="center", fontsize=9)
+            ax2.fill_betweenx([tops[i], bottoms[i]], 0, rho_vals[i], alpha=0.35)
+            ax2.text(rho_vals[i] * 1.05, (tops[i] + bottoms[i]) / 2,
+                     f"{rho_vals[i]:.1f} Ω·m", va="center", fontsize=9)
 
         ax2.invert_yaxis()
         ax2.set_xlabel("Resistivity (Ω·m)")
@@ -209,9 +208,8 @@ with col2:
     # model table with both models side-by-side (same thickness pattern)
     model_df = pd.DataFrame({
         "Layer": np.arange(1, n_layers + 1),
-        "ρ Model 1 (Ω·m)": rho_1,
-        "ρ Model 2 (Ω·m)": rho_2,
-        "Thickness (m)": [*thicknesses_1, np.nan],
+        "ρ Model 1 (Ω·m)": rho,
+        "Thickness (m)": [*thicknesses, np.nan],
         "Note": [""] * (n_layers - 1) + ["Half-space"]
     })
     st.dataframe(model_df, use_container_width=True)
