@@ -57,25 +57,24 @@ with st.sidebar:
 
 # horizontal electrodes from -L/2 to +L/2
 x_electrodes = np.linspace(-line_length / 2.0, line_length / 2.0, n_electrodes)
-z_electrodes = np.zeros_like(x_electrodes)
+z_electrodes = np.zeros_like(x_electrodes)  # not directly used but conceptually z=0
 
-# 2D mesh: x (horizontal), z (vertical, positive down)
-# make it a bit wider and deeper than the electrode line
+# 2D mesh: x (horizontal), z (vertical, positive down in physical sense, negative in mesh coords)
 domain_width = line_length * 1.5
-domain_depth = line_length  # depth extent
+domain_depth = line_length
 
 nx = 80
 nz = 40
 hx = np.ones(nx) * (domain_width / nx)
 hz = np.ones(nz) * (domain_depth / nz)
 
-# origin at left, top = z=0
+# origin at left, top = z=0 → in mesh coords that is z=0; cells go down negative
 mesh = TensorMesh([hx, hz], x0=(-domain_width / 2.0, -domain_depth))
 
 # build resistivity model: background + rectangular block
 rho_model = rho_bg * np.ones(mesh.nC)
 
-xc, zc = mesh.cell_centers[:, 0], mesh.cell_centers[:, 1]  # zc is negative downwards
+xc, zc = mesh.cell_centers[:, 0], mesh.cell_centers[:, 1]  # zc is negative downward
 
 # convert block z (positive down) to mesh coords (negative)
 z_block_top = -block_zmin
@@ -102,9 +101,8 @@ separations = []
 
 # electrode spacing (assumed uniform)
 dx = x_electrodes[1] - x_electrodes[0]
-a = a_factor * dx
+a = a_factor * dx  # (not explicitly used in geometry here, but OK conceptually)
 
-# we treat electrodes as indexed positions but use their actual x coords
 # A at i, B at i+1 ; M at i+1+n_spacing, N at i+2+n_spacing
 for iA in range(n_electrodes):
     iB = iA + 1
@@ -114,10 +112,11 @@ for iA in range(n_electrodes):
     if iN >= n_electrodes:
         break
 
-    A = np.r_[x_electrodes[iA], 0.0, 0.0]
-    B = np.r_[x_electrodes[iB], 0.0, 0.0]
-    M = np.r_[x_electrodes[iM], 0.0, 0.0]
-    N = np.r_[x_electrodes[iN], 0.0, 0.0]
+    # <<< IMPORTANT FIX: 2D coordinates (x, z) instead of 3D (x, y, z) >>>
+    A = np.r_[x_electrodes[iA], 0.0]
+    B = np.r_[x_electrodes[iB], 0.0]
+    M = np.r_[x_electrodes[iM], 0.0]
+    N = np.r_[x_electrodes[iN], 0.0]
 
     rx = dc.receivers.Dipole(M, N, data_type="apparent_resistivity")
     src = dc.sources.Dipole([rx], A, B)
@@ -162,14 +161,13 @@ with col1:
     st.subheader("Resistivity model (2D)")
 
     fig_m, ax_m = plt.subplots(figsize=(4, 5))
-    # plot log10 resistivity for contrast
     m_img = ax_m.tripcolor(
         xc, zc, np.log10(rho_model),
         shading="gouraud"
     )
     ax_m.invert_yaxis()
     ax_m.set_xlabel("x (m)")
-    ax_m.set_ylabel("z (m, positive down)")
+    ax_m.set_ylabel("z (m, mesh coords)")
     ax_m.set_title("log10(ρ) model")
     fig_m.colorbar(m_img, ax=ax_m, label="log10(ρ / Ω·m)")
     st.pyplot(fig_m, clear_figure=True)
