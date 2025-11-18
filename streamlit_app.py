@@ -53,12 +53,9 @@ with st.sidebar:
     default_rho = [10.0, 30.0, 15.0, 50.0, 100.0][:n_layers]
     default_thk = [2.0, 8.0, 60.0, 120.0][:max(0, n_layers - 1)]
 
-    # ---------- Model 1 ----------
-    st.subheader("Model 1")
-
-    layer_rhos_1 = []
+    layer_rhos = []
     for i in range(n_layers):
-        layer_rhos_1.append(
+        layer_rhos.append(
             st.number_input(
                 f"ρ Layer {i+1} (Ω·m) — M1",
                 min_value=0.1,
@@ -67,7 +64,7 @@ with st.sidebar:
             )
         )
 
-    thicknesses_1 = []
+    thicknesses = []
     if n_layers > 1:
         st.caption("Thicknesses for upper N−1 layers (Model 1):")
         for i in range(n_layers - 1):
@@ -80,42 +77,9 @@ with st.sidebar:
                 )
             )
 
-    st.divider()
-
-    # ---------- Model 2 ----------
-    st.subheader("Model 2")
-
-    # Use slightly different defaults for Model 2 just to encourage variation
-    default_rho_2 = [val * 2 for val in default_rho]  # e.g. double resistivities
-    default_thk_2 = default_thk[:]                    # same thickness defaults
-
-    layer_rhos_2 = []
-    for i in range(n_layers):
-        layer_rhos_2.append(
-            st.number_input(
-                f"ρ Layer {i+1} (Ω·m) — M2",
-                min_value=0.1,
-                value=float(default_rho_2[i]),
-                step=0.1
-            )
-        )
-
-    thicknesses_2 = []
-    if n_layers > 1:
-        st.caption("Thicknesses for upper N−1 layers (Model 2):")
-        for i in range(n_layers - 1):
-            thicknesses_2.append(
-                st.number_input(
-                    f"Thickness L{i+1} (m) — M2",
-                    min_value=0.1,
-                    value=float(default_thk_2[i]),
-                    step=0.1
-                )
-            )
 
 # Convert thickness lists to numpy arrays
-thicknesses_1 = np.r_[thicknesses_1] if len(thicknesses_1) else np.array([])
-thicknesses_2 = np.r_[thicknesses_2] if len(thicknesses_2) else np.array([])
+thicknesses = np.r_[thicknesses] if len(thicknesses) else np.array([])
 
 st.divider()
 
@@ -144,27 +108,17 @@ survey = dc.Survey(src_list)
 # 4) SIMULATION & FORWARD MODELLING (2 models)
 # ==============================================================
 
-rho_1 = np.r_[layer_rhos_1]
-rho_2 = np.r_[layer_rhos_2]
+rho = np.r_[layer_rhos]
+rho_map = maps.IdentityMap(nP=len(rho))
 
-rho_map_1 = maps.IdentityMap(nP=len(rho_1))
-rho_map_2 = maps.IdentityMap(nP=len(rho_2))
-
-sim_1 = dc.simulation_1d.Simulation1DLayers(
+sim = dc.simulation_1d.Simulation1DLayers(
     survey=survey,
-    rhoMap=rho_map_1,
-    thicknesses=thicknesses_1
-)
-
-sim_2 = dc.simulation_1d.Simulation1DLayers(
-    survey=survey,
-    rhoMap=rho_map_2,
-    thicknesses=thicknesses_2
+    rhoMap=rho_map,
+    thicknesses=thicknesses
 )
 
 try:
-    rho_app_1 = sim_1.dpred(rho_1)
-    rho_app_2 = sim_2.dpred(rho_2)
+    rho_app = sim.dpred(rho)
     ok = True
 except Exception as e:
     ok = False
@@ -184,8 +138,7 @@ with col1:
     if ok:
         fig, ax = plt.subplots(figsize=(7, 5))
 
-        ax.loglog(AB2, rho_app_1, "o-", label="Model 1")
-        ax.loglog(AB2, rho_app_2, "s--", label="Model 2")
+        ax.loglog(AB2, rho_app, "o-", label="Model 1")
 
         # combine ranges of both models for nice frame
         ymin = min(rho_app_1.min(), rho_app_2.min())
