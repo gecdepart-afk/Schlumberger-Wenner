@@ -97,24 +97,45 @@ eps = 1e-6
 # Each source defines:
 #  - A and B (current electrodes)
 #  - one receiver (M–N dipole measuring potential)
-src_list = []
+src_list_s = []
 for L, a in zip(AB2, MN2):
     # Positions of electrodes along the x-axis (y,z = 0)
-    A = np.r_[-L, 0.0, 0.0]
-    B = np.r_[ +L, 0.0, 0.0]
-    M = np.r_[ -(a - eps), 0.0, 0.0]
-    N = np.r_[ +(a - eps), 0.0, 0.0]
+    A_s = np.r_[-L, 0.0, 0.0]
+    B_s = np.r_[ +L, 0.0, 0.0]
+    M_s = np.r_[ -(a - eps), 0.0, 0.0]
+    N_s = np.r_[ +(a - eps), 0.0, 0.0]
 
     # Receiver measures apparent resistivity directly
-    rx = dc.receivers.Dipole(M, N, data_type="apparent_resistivity")
+    rx_s = dc.receivers.Dipole(M_s, N_s, data_type="apparent_resistivity")
 
     # Source = AB current dipole carrying this receiver
-    src = dc.sources.Dipole([rx], A, B)
-    src_list.append(src)
+    src_s = dc.sources.Dipole([rx_s], A, B)
+    src_list_s.append(src_s)
 
 # Create the SimPEG survey object from all sources
-survey = dc.Survey(src_list)
+survey_s = dc.Survey(src_list_s)
 
+# Prepare SimPEG “sources” — one per station
+# Each source defines:
+#  - A and B (current electrodes)
+#  - one receiver (M–N dipole measuring potential)
+src_list_w = []
+for L in AB2:
+    # Positions of electrodes along the x-axis (y,z = 0)
+    A_w = np.r_[-L, 0.0, 0.0]
+    B_w = np.r_[ +L, 0.0, 0.0]
+    M_w = np.r_[ -L/3, 0.0, 0.0]
+    N_w = np.r_[ +L/3, 0.0, 0.0]
+
+    # Receiver measures apparent resistivity directly
+    rx_w = dc.receivers.Dipole(M_w, N_w, data_type="apparent_resistivity")
+
+    # Source = AB current dipole carrying this receiver
+    src_w = dc.sources.Dipole([rx_w], A, B)
+    src_list_w.append(src_w)
+
+# Create the SimPEG survey object from all sources
+survey_w = dc.Survey(src_list_w)
 # ==============================================================
 # 4) SIMULATION & FORWARD MODELLING
 # ==============================================================
@@ -126,15 +147,22 @@ rho = np.r_[layer_rhos]
 rho_map = maps.IdentityMap(nP=len(rho))
 
 # Create a 1D layered-earth DC resistivity simulation
-sim = dc.simulation_1d.Simulation1DLayers(
-    survey=survey,           # measurement geometry
+sim_s = dc.simulation_1d.Simulation1DLayers(
+    survey=survey_s,           # measurement geometry
+    rhoMap=rho_map,          # how model is interpreted
+    thicknesses=thicknesses  # array of thicknesses for upper layers
+)
+# Create a 1D layered-earth DC resistivity simulation
+sim_w = dc.simulation_1d.Simulation1DLayers(
+    survey=survey_w,           # measurement geometry
     rhoMap=rho_map,          # how model is interpreted
     thicknesses=thicknesses  # array of thicknesses for upper layers
 )
 
 # Run forward simulation: compute apparent resistivity ρa for each AB/2
 try:
-    rho_app = sim.dpred(rho)   # dpred = “data predicted” by forward model
+    rho_app_s = sim_s.dpred(rho)   # dpred = “data predicted” by forward model
+    rho_app_w = sim_w.dpred(rho)   # dpred = “data predicted” by forward model
     ok = True
 except Exception as e:
     ok = False
@@ -152,7 +180,8 @@ with col1:
     if ok:
         # Create a figure using matplotlib
         fig, ax = plt.subplots(figsize=(7, 5))
-        ax.loglog(AB2, rho_app, "o-", label="ρₐ (predicted)")
+        ax.loglog(AB2, rho_app_s, "o-", label="ρₐ (predicted)")
+        ax.loglog(AB2, rho_app_w, "o-", label="ρₐ (predicted)")
         ax.grid(True, which="both", ls=":")
         ax.set_xlabel("AB/2 (m)")
         ax.set_ylabel("Apparent resistivity (Ω·m)")
