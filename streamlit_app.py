@@ -68,7 +68,7 @@ with st.sidebar:
     if n_layers > 1:
         st.caption("Thicknesses for upper N−1 layers (Model 1):")
         for i in range(n_layers - 1):
-            thicknesses_1.append(
+            thicknesses.append(
                 st.number_input(
                     f"Thickness L{i+1} (m) — M1",
                     min_value=0.1,
