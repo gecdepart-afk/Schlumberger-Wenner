@@ -141,8 +141,8 @@ with col1:
         ax.loglog(AB2, rho_app, "o-", label="Model 1")
 
         # combine ranges of both models for nice frame
-        ymin = min(rho_app.min())
-        ymax = max(rho_app.max())
+        ymin = rho_app.min
+        ymax = rho_app.max
         ax.set_ylim(10**np.floor(np.log10(ymin)), 10**np.ceil(np.log10(ymax)))
 
         ax.yaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
