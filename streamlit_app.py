@@ -58,9 +58,7 @@ with st.sidebar:   # everything inside here appears in the Streamlit sidebar
     # Default layer resistivities and thicknesses (editable)
     default_rho_1 = [10.0, 30.0, 15.0, 50.0, 100.0][:n_layers]
     default_thk_1 = [2.0, 8.0, 60.0, 120.0][:max(0, n_layers - 1)]
-    # Default layer resistivities and thicknesses (editable)
-    default_rho_2 = [10.0, 30.0, 15.0, 50.0, 100.0][:n_layers]
-    default_thk_2 = [2.0, 8.0, 60.0, 120.0][:max(0, n_layers - 1)]
+
     # Resistivity input per layer
     # ---------- Model 1 ----------
     st.subheader("Model 1")
@@ -80,6 +78,9 @@ with st.sidebar:   # everything inside here appears in the Streamlit sidebar
             )
     st.divider
     st.subheader("Model 2")
+    # Default layer resistivities and thicknesses (editable)
+    default_rho_2 = [10.0, 30.0, 15.0, 50.0, 100.0][:n_layers]
+    default_thk_2 = [2.0, 8.0, 60.0, 120.0][:max(0, n_layers - 1)]
     layer_rhos_2 = []
     for i in range(n_layers):
         layer_rhos_2.append(
