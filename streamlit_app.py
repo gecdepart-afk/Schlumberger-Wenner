@@ -84,7 +84,12 @@ with st.sidebar:   # everything inside here appears in the Streamlit sidebar
     layer_rhos_2 = []
     for i in range(n_layers):
         layer_rhos_2.append(
-            st.number_input(f"ρ Layer {i+1} (Ω·m)", min_value=0.1, value=float(default_rho_2[i]), step=0.1)
+            st.number_input(
+                f"ρ Layer {i+1} (Ω·m) — M2",
+                min_value=0.1,
+                value=float(default_rho_2[i]),
+                step=0.1
+            )
         )
 
     # Thickness input for the top N−1 layers (the last layer has infinite thickness)
