@@ -61,25 +61,41 @@ with st.sidebar:   # everything inside here appears in the Streamlit sidebar
 
     # Resistivity input per layer
     # ---------- Model 1 ----------
-    #st.subheader("Model 1")
-    layer_rhos = []
+    st.subheader("Model 1")
+    layer_rhos_1 = []
     for i in range(n_layers):
-        layer_rhos.append(
+        layer_rhos_1.append(
             st.number_input(f"ρ Layer {i+1} (Ω·m)", min_value=0.1, value=float(default_rho[i]), step=0.1)
         )
 
     # Thickness input for the top N−1 layers (the last layer has infinite thickness)
-    thicknesses = []
+    thicknesses_1 = []
     if n_layers > 1:
         st.caption("Thicknesses for the **upper** N−1 layers (last layer is half-space):")
         for i in range(n_layers - 1):
-            thicknesses.append(
+            thicknesses_1.append(
+                st.number_input(f"Thickness L{i+1} (m)", min_value=0.1, value=float(default_thk[i]), step=0.1)
+            )
+st.divider
+st.subheader("Model 2")
+    layer_rhos_2 = []
+    for i in range(n_layers):
+        layer_rhos_2.append(
+            st.number_input(f"ρ Layer {i+1} (Ω·m)", min_value=0.1, value=float(default_rho[i]), step=0.1)
+        )
+
+    # Thickness input for the top N−1 layers (the last layer has infinite thickness)
+    thicknesses_2 = []
+    if n_layers > 1:
+        st.caption("Thicknesses for the **upper** N−1 layers (last layer is half-space):")
+        for i in range(n_layers - 1):
+            thicknesses_2.append(
                 st.number_input(f"Thickness L{i+1} (m)", min_value=0.1, value=float(default_thk[i]), step=0.1)
             )
 
 # Convert thickness list to numpy array (SimPEG expects NumPy arrays, not Python lists)
-thicknesses = np.r_[thicknesses] if len(thicknesses) else np.array([])
-
+thicknesses_1 = np.r_[thicknesses_1] if len(thicknesses_1) else np.array([])
+thicknesses_2 = np.r_[thicknesses_2] if len(thicknesses_2) else np.array([])
 st.divider()
 
 # ==============================================================
@@ -121,44 +137,27 @@ survey = dc.Survey(src_list)
 # 4) SIMULATION & FORWARD MODELLING
 # ==============================================================
 
-#rho_1 = np.r_[layer_rhos_1]
-#rho_2 = np.r_[layer_rhos_2]
+rho_1 = np.r_[layer_rhos_1]
+rho_2 = np.r_[layer_rhos_2]
 
-#rho_map_1 = maps.IdentityMap(nP=len(rho_1))
-#rho_map_2 = maps.IdentityMap(nP=len(rho_2))
+rho_map_1 = maps.IdentityMap(nP=len(rho_1))
+rho_map_2 = maps.IdentityMap(nP=len(rho_2))
 
-#sim_1 = dc.simulation_1d.Simulation1DLayers(
-#    survey=survey,
-#    rhoMap=rho_map_1,
-#    thicknesses=thicknesses_1
-#)
-
-#sim_2 = dc.simulation_1d.Simulation1DLayers(
-#    survey=survey,
-#    rhoMap=rho_map_2,
-#    thicknesses=thicknesses_2
-#)
-
-#try:
-#    rho_app_1 = sim_1.dpred(rho_1)
-#    rho_app_2 = sim_2.dpred(rho_2)
-    
-# Convert the list of user-defined resistivities into a NumPy array
-rho = np.r_[layer_rhos]
-
-# “IdentityMap” tells SimPEG that model parameters are already in resistivity units
-rho_map = maps.IdentityMap(nP=len(rho))
-
-# Create a 1D layered-earth DC resistivity simulation
-sim = dc.simulation_1d.Simulation1DLayers(
-    survey=survey,           # measurement geometry
-    rhoMap=rho_map,          # how model is interpreted
-    thicknesses=thicknesses  # array of thicknesses for upper layers
+sim_1 = dc.simulation_1d.Simulation1DLayers(
+    survey=survey,
+    rhoMap=rho_map_1,
+    thicknesses=thicknesses_1
 )
 
-# Run forward simulation: compute apparent resistivity ρa for each AB/2
+sim_2 = dc.simulation_1d.Simulation1DLayers(
+    survey=survey,
+    rhoMap=rho_map_2,
+    thicknesses=thicknesses_2
+)
+
 try:
-    rho_app = sim.dpred(rho)   # dpred = “data predicted” by forward model
+    rho_app_1 = sim_1.dpred(rho_1)
+    rho_app_2 = sim_2.dpred(rho_2)
     ok = True
 except Exception as e:
     ok = False
@@ -176,7 +175,8 @@ with col1:
     if ok:
         # Create a figure using matplotlib
         fig, ax = plt.subplots(figsize=(7, 5))
-        ax.loglog(AB2, rho_app, "o-", label="ρₐ (predicted)")
+        ax.loglog(AB2, rho_app_1, "o-", label="ρₐ (predicted)")
+        ax.loglog(AB2, rho_app_2, "o-", label="ρₐ (predicted)")
         ax.grid(True, which="both", ls=":")
         ax.set_xlabel("AB/2 (m)")
         ax.set_ylabel("Apparent resistivity (Ω·m)")
