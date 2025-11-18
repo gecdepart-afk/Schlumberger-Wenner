@@ -56,9 +56,11 @@ with st.sidebar:   # everything inside here appears in the Streamlit sidebar
     n_layers = st.slider("Number of layers", 3, 5, 4, help="Total layers (last layer is a half-space).")
 
     # Default layer resistivities and thicknesses (editable)
-    default_rho = [10.0, 30.0, 15.0, 50.0, 100.0][:n_layers]
-    default_thk = [2.0, 8.0, 60.0, 120.0][:max(0, n_layers - 1)]
-
+    default_rho_1 = [10.0, 30.0, 15.0, 50.0, 100.0][:n_layers]
+    default_thk_1 = [2.0, 8.0, 60.0, 120.0][:max(0, n_layers - 1)]
+    # Default layer resistivities and thicknesses (editable)
+    default_rho_2 = [10.0, 30.0, 15.0, 50.0, 100.0][:n_layers]
+    default_thk_2 = [2.0, 8.0, 60.0, 120.0][:max(0, n_layers - 1)]
     # Resistivity input per layer
     # ---------- Model 1 ----------
     st.subheader("Model 1")
