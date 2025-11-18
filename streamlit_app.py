@@ -76,8 +76,8 @@ with st.sidebar:   # everything inside here appears in the Streamlit sidebar
             thicknesses_1.append(
                 st.number_input(f"Thickness L{i+1} (m)", min_value=0.1, value=float(default_thk[i]), step=0.1)
             )
-st.divider
-st.subheader("Model 2")
+    st.divider
+    st.subheader("Model 2")
     layer_rhos_2 = []
     for i in range(n_layers):
         layer_rhos_2.append(
