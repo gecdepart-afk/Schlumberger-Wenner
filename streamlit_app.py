@@ -109,7 +109,7 @@ for L, a in zip(AB2, MN2):
     rx_s = dc.receivers.Dipole(M_s, N_s, data_type="apparent_resistivity")
 
     # Source = AB current dipole carrying this receiver
-    src_s = dc.sources.Dipole([rx_s], A, B)
+    src_s = dc.sources.Dipole([rx_s], A_s, B_s)
     src_list_s.append(src_s)
 
 # Create the SimPEG survey object from all sources
@@ -131,7 +131,7 @@ for L in AB2:
     rx_w = dc.receivers.Dipole(M_w, N_w, data_type="apparent_resistivity")
 
     # Source = AB current dipole carrying this receiver
-    src_w = dc.sources.Dipole([rx_w], A, B)
+    src_w = dc.sources.Dipole([rx_w], A_w, B_w)
     src_list_w.append(src_w)
 
 # Create the SimPEG survey object from all sources
