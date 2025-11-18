@@ -137,7 +137,7 @@ with col1:
     st.subheader("Sounding curves (log–log)")
     if ok:
         fig, ax = plt.subplots(figsize=(7, 5))
-
+  b     st.write("rho_app min/max:", float(rho_app.min()), float(rho_app.max()))
         ax.loglog(AB2, rho_app, "o-", label="Model 1")
 
         # combine ranges of both models for nice frame
