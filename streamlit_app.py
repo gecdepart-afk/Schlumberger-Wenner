@@ -136,7 +136,7 @@ except Exception as e:
     st.error(f"Forward modelling failed: {e}")
 
 
-# <<< NEW: finite-difference sensitivity for one datum >>>
+# finite-difference sensitivity for one datum
 def compute_normalized_sensitivity(sim, rho, station_index, rel_perturb=0.01):
     """
     Very simple 'teaching' sensitivity:
@@ -229,7 +229,9 @@ with col2:
     })
     st.dataframe(model_df, use_container_width=True)
 
-# <<< NEW: SENSITIVITY PLOT SECTION >>>
+# --------------------------------------------------------------
+# SENSITIVITY PLOT SECTION
+# --------------------------------------------------------------
 st.divider()
 st.subheader("Simple sensitivity curve (per datum)")
 
@@ -243,6 +245,10 @@ if ok:
             "Station index (0 = smallest AB/2)",
             0, len(AB2) - 1, idx_default,
         )
+
+    # <<< NEW: show AB/2 for selected station >>>
+    selected_ab2 = AB2[station_index]
+    st.caption(f"Selected station: #{station_index} – AB/2 = {selected_ab2:.2f} m")
 
     if array_choice == "Schlumberger":
         sens = compute_normalized_sensitivity(sim_s, rho, station_index)
