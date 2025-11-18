@@ -92,13 +92,17 @@ with st.sidebar:   # everything inside here appears in the Streamlit sidebar
             )
         )
 
-    # Thickness input for the top N−1 layers (the last layer has infinite thickness)
     thicknesses_2 = []
     if n_layers > 1:
-        st.caption("Thicknesses for the **upper** N−1 layers (last layer is half-space):")
+        st.caption("Thicknesses for upper N−1 layers (Model 2):")
         for i in range(n_layers - 1):
             thicknesses_2.append(
-                st.number_input(f"Thickness L{i+1} (m)", min_value=0.1, value=float(default_thk_2[i]), step=0.1)
+                st.number_input(
+                    f"Thickness L{i+1} (m) — M2",
+                    min_value=0.1,
+                    value=float(default_thk_2[i]),
+                    step=0.1
+                )
             )
 
 # Convert thickness list to numpy array (SimPEG expects NumPy arrays, not Python lists)
