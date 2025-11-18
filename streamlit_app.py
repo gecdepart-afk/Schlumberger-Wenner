@@ -65,7 +65,7 @@ with st.sidebar:   # everything inside here appears in the Streamlit sidebar
     layer_rhos_1 = []
     for i in range(n_layers):
         layer_rhos_1.append(
-            st.number_input(f"ρ Layer {i+1} (Ω·m)", min_value=0.1, value=float(default_rho[i]), step=0.1)
+            st.number_input(f"ρ Layer {i+1} (Ω·m)", min_value=0.1, value=float(default_rho_1[i]), step=0.1)
         )
 
     # Thickness input for the top N−1 layers (the last layer has infinite thickness)
@@ -74,14 +74,14 @@ with st.sidebar:   # everything inside here appears in the Streamlit sidebar
         st.caption("Thicknesses for the **upper** N−1 layers (last layer is half-space):")
         for i in range(n_layers - 1):
             thicknesses_1.append(
-                st.number_input(f"Thickness L{i+1} (m)", min_value=0.1, value=float(default_thk[i]), step=0.1)
+                st.number_input(f"Thickness L{i+1} (m)", min_value=0.1, value=float(default_thk_1[i]), step=0.1)
             )
     st.divider
     st.subheader("Model 2")
     layer_rhos_2 = []
     for i in range(n_layers):
         layer_rhos_2.append(
-            st.number_input(f"ρ Layer {i+1} (Ω·m)", min_value=0.1, value=float(default_rho[i]), step=0.1)
+            st.number_input(f"ρ Layer {i+1} (Ω·m)", min_value=0.1, value=float(default_rho_2[i]), step=0.1)
         )
 
     # Thickness input for the top N−1 layers (the last layer has infinite thickness)
@@ -90,7 +90,7 @@ with st.sidebar:   # everything inside here appears in the Streamlit sidebar
         st.caption("Thicknesses for the **upper** N−1 layers (last layer is half-space):")
         for i in range(n_layers - 1):
             thicknesses_2.append(
-                st.number_input(f"Thickness L{i+1} (m)", min_value=0.1, value=float(default_thk[i]), step=0.1)
+                st.number_input(f"Thickness L{i+1} (m)", min_value=0.1, value=float(default_thk_2[i]), step=0.1)
             )
 
 # Convert thickness list to numpy array (SimPEG expects NumPy arrays, not Python lists)
