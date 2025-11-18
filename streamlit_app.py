@@ -1,6 +1,6 @@
 # ==============================
 # 1D DC Forward Modelling (SimPEG)
-# Streamlit app — Schlumberger & Wenner, + simple sensitivity curves
+# Streamlit app — Schlumberger & Wenner + simple sensitivity curves
 # ==============================
 
 # --- Core scientific libraries ---
@@ -41,7 +41,7 @@ with st.sidebar:
 
     n_stations = st.slider("Number of stations", min_value=8, max_value=60, value=25, step=1)
 
-    st.caption("MN/2 is set automatically to 10% of AB/2 (and clipped to < 0.5·AB/2).")
+    st.caption("MN/2 (Schl.) is set automatically to 10% of AB/2 (and clipped to < 0.5·AB/2).")
 
     st.divider()
     st.header("Layers")
@@ -65,6 +65,7 @@ with st.sidebar:
                 st.number_input(f"Thickness L{i+1} (m)", min_value=0.1, value=float(default_thk[i]), step=0.1)
             )
 
+# Convert thickness list to numpy array (SimPEG expects NumPy arrays, not Python lists)
 thicknesses = np.r_[thicknesses] if len(thicknesses) else np.array([])
 
 st.divider()
@@ -74,10 +75,10 @@ st.divider()
 # ==============================================================
 
 AB2 = np.geomspace(ab2_min, ab2_max, n_stations)
-MN2 = np.minimum(0.10 * AB2, 0.49 * AB2)
+MN2 = np.minimum(0.10 * AB2, 0.49 * AB2)   # Schlumberger MN/2
 eps = 1e-6
 
-# --- Schlumberger ---
+# --- Schlumberger survey ---
 src_list_s = []
 for L, a in zip(AB2, MN2):
     A_s = np.r_[-L, 0.0, 0.0]
@@ -91,10 +92,10 @@ for L, a in zip(AB2, MN2):
 
 survey_s = dc.Survey(src_list_s)
 
-# --- Wenner ---
+# --- Wenner survey ---
 src_list_w = []
 for L in AB2:
-    # AB = 2L, Wenner spacing a = AB/3 = 2L/3
+    # AB = 2L ; Wenner spacing a = AB/3 = 2L/3
     a = (2.0 * L) / 3.0
     A_w = np.r_[-1.5 * a, 0.0, 0.0]
     M_w = np.r_[-0.5 * a, 0.0, 0.0]
@@ -135,12 +136,12 @@ except Exception as e:
     st.error(f"Forward modelling failed: {e}")
 
 
-# >>> NEW: small helper to compute a simple finite-difference sensitivity
+# <<< NEW: finite-difference sensitivity for one datum >>>
 def compute_normalized_sensitivity(sim, rho, station_index, rel_perturb=0.01):
     """
-    Compute a very simple 'teaching' sensitivity curve for one datum:
+    Very simple 'teaching' sensitivity:
     - perturb each layer resistivity by +1 %
-    - look at change in that datum
+    - compute change in a single datum (station_index)
     - take absolute value and normalise so max = 1
     """
     base = sim.dpred(rho)
@@ -192,7 +193,7 @@ with col1:
             mime="text/csv",
         )
 
-# --- RIGHT: Layered model ---
+# --- RIGHT: Layered model visualization ---
 with col2:
     st.subheader("Layered model")
     if ok:
@@ -223,18 +224,16 @@ with col2:
     model_df = pd.DataFrame({
         "Layer": np.arange(1, n_layers + 1),
         "Resistivity (Ω·m)": rho,
-        "Thickness (m)": [*thicknesses, np.nan],
+        "Thickness (m)": [*thicknesses, np.nan],  # NaN for last layer (half-space)
         "Note": [""] * (n_layers - 1) + ["Half-space"]
     })
     st.dataframe(model_df, use_container_width=True)
 
-
-# >>> NEW: SENSITIVITY PLOT SECTION
+# <<< NEW: SENSITIVITY PLOT SECTION >>>
 st.divider()
 st.subheader("Simple sensitivity curve (per datum)")
 
 if ok:
-    # choose array & station
     colA, colB = st.columns(2)
     with colA:
         array_choice = st.selectbox("Array", ["Schlumberger", "Wenner"])
@@ -250,15 +249,20 @@ if ok:
     else:
         sens = compute_normalized_sensitivity(sim_w, rho, station_index)
 
-    # depth grid (layer centres)
+    # build depth centres for each layer (tops/bottoms same length)
     if len(thicknesses):
-        interfaces = np.r_[0.0, np.cumsum(thicknesses)]
+        cum_thk = np.cumsum(thicknesses)           # len = n_layers-1
+        interfaces = np.r_[0.0, cum_thk]           # len = n_layers
+        z_last = interfaces[-1]
+        z_bottom = z_last + max(z_last * 0.3, 10.0)
+
+        tops_layers = interfaces                   # len = n_layers
+        bottoms_layers = np.r_[cum_thk, z_bottom]  # len = n_layers
     else:
-        interfaces = np.r_[0.0]
-    z_bottom = interfaces[-1] + max(interfaces[-1] * 0.3, 10.0)
-    tops = np.r_[interfaces, interfaces[-1]]
-    bottoms = np.r_[interfaces[1:], z_bottom]
-    z_centres = 0.5 * (tops + bottoms)
+        tops_layers = np.array([0.0])
+        bottoms_layers = np.array([10.0])
+
+    z_centres = 0.5 * (tops_layers + bottoms_layers)
 
     fig3, ax3 = plt.subplots(figsize=(5, 4))
     ax3.plot(sens, z_centres, "o-")
@@ -269,12 +273,12 @@ if ok:
     ax3.set_title(f"Sensitivity of datum #{station_index} ({array_choice})")
     st.pyplot(fig3, clear_figure=True)
 
-
 # ==============================================================
-# 6) FOOTNOTE
+# 6) FOOTNOTE — teaching notes
 # ==============================================================
 
 st.caption(
-    "Notes: MN/2 is fixed to 10% of AB/2 for Schlumberger. Sensitivity curves here are simple finite-difference "
-    "approximations, normalised for teaching purposes (they show relative contribution of each layer to one datum)."
+    "MN/2 is fixed to 10% of AB/2 for the Schlumberger array. "
+    "Sensitivity curves are simple finite-difference approximations, normalised so that the most "
+    "influential layer for a given datum has sensitivity = 1."
 )
