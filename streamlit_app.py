@@ -60,6 +60,8 @@ with st.sidebar:   # everything inside here appears in the Streamlit sidebar
     default_thk = [2.0, 8.0, 60.0, 120.0][:max(0, n_layers - 1)]
 
     # Resistivity input per layer
+    # ---------- Model 1 ----------
+    #st.subheader("Model 1")
     layer_rhos = []
     for i in range(n_layers):
         layer_rhos.append(
@@ -119,6 +121,28 @@ survey = dc.Survey(src_list)
 # 4) SIMULATION & FORWARD MODELLING
 # ==============================================================
 
+#rho_1 = np.r_[layer_rhos_1]
+#rho_2 = np.r_[layer_rhos_2]
+
+#rho_map_1 = maps.IdentityMap(nP=len(rho_1))
+#rho_map_2 = maps.IdentityMap(nP=len(rho_2))
+
+#sim_1 = dc.simulation_1d.Simulation1DLayers(
+#    survey=survey,
+#    rhoMap=rho_map_1,
+#    thicknesses=thicknesses_1
+#)
+
+#sim_2 = dc.simulation_1d.Simulation1DLayers(
+#    survey=survey,
+#    rhoMap=rho_map_2,
+#    thicknesses=thicknesses_2
+#)
+
+#try:
+#    rho_app_1 = sim_1.dpred(rho_1)
+#    rho_app_2 = sim_2.dpred(rho_2)
+    
 # Convert the list of user-defined resistivities into a NumPy array
 rho = np.r_[layer_rhos]
 
