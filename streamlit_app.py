@@ -195,7 +195,7 @@ with col1:
         df_out = pd.DataFrame({
             "AB/2 (m)": AB2,
             "MN/2 (m)": MN2,
-            "Apparent resistivity (ohm·m)": rho_app,
+            "Apparent resistivity (ohm·m)": rho_app_s,
         })
         st.download_button(
             "⬇️ Download synthetic data (CSV)",
