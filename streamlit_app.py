@@ -1,29 +1,28 @@
 # ==============================
 # 1D DC Forward Modelling (SimPEG)
-# Streamlit app — Schlumberger only, user edits AB/2 only
+# Streamlit app — Schlumberger & Wenner + depth-of-investigation kernel
 # ==============================
 
 # --- Core scientific libraries ---
-import numpy as np                    # numerical arrays & math (efficient vector operations)
-import pandas as pd                   # tabular data handling (for model table + CSV export)
-import matplotlib.pyplot as plt       # plotting library for charts and model visualization
-import streamlit as st                # Streamlit: web UI framework for Python (interactive apps)
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import streamlit as st
 
 # --- SimPEG modules for DC resistivity ---
-from simpeg.electromagnetics.static import resistivity as dc  # SimPEG DC resistivity subpackage
-from simpeg import maps               # “maps” connect model parameters to physical quantities
+from simpeg.electromagnetics.static import resistivity as dc
+from simpeg import maps
 
 # ---------------------------
 # 1) PAGE SETUP & HEADER
 # ---------------------------
 
-# Configure the web app: title, icon, and layout
 st.set_page_config(page_title="1D DC Forward (SimPEG)", page_icon="🪪", layout="wide")
 
-# Title and description displayed at the top of the app
-st.title("1D DC Resistivity — Forward Modelling (Schlumberger)")
+st.title("1D DC Resistivity — Schlumberger & Wenner")
 st.markdown(
-    "Configure a layered Earth and **AB/2** geometry, then compute the **apparent resistivity** curve. "
+    "Configure a layered Earth and **AB/2** geometry, then compute the **apparent resistivity** "
+    "curves for **Schlumberger** and **Wenner** arrays.\n\n"
     "Uses `simpeg.electromagnetics.static.resistivity.simulation_1d.Simulation1DLayers`."
 )
 
@@ -31,42 +30,33 @@ st.markdown(
 # 2) SIDEBAR — INPUT PARAMETERS (geometry and layer model)
 # ==============================================================
 
-with st.sidebar:   # everything inside here appears in the Streamlit sidebar
+with st.sidebar:
     st.header("Geometry (Schlumberger)")
 
-    # --- AB/2 range controls (geometry setup) ---
-    # Two side-by-side numeric inputs: minimum and maximum AB/2 electrode spacing
     colA1, colA2 = st.columns(2)
     with colA1:
         ab2_min = st.number_input("AB/2 min (m)", min_value=0.1, value=5.0, step=0.1, format="%.2f")
     with colA2:
         ab2_max = st.number_input("AB/2 max (m)", min_value=ab2_min + 0.1, value=300.0, step=1.0, format="%.2f")
 
-    # Number of measurement stations between AB2_min and AB2_max
     n_stations = st.slider("Number of stations", min_value=8, max_value=60, value=25, step=1)
 
-    # Fix MN/2 to a standard ratio (10% of AB/2)
-    st.caption("MN/2 is set automatically to 10% of AB/2 (and clipped to < 0.5·AB/2).")
+    st.caption("MN/2 (Schl.) is set automatically to 10% of AB/2 (and clipped to < 0.5·AB/2).")
 
     st.divider()
     st.header("Layers")
 
-    # --- Layer parameters (resistivity + thickness) ---
-    # Choose number of layers (3–5). The last one is the infinite half-space.
     n_layers = st.slider("Number of layers", 3, 5, 4, help="Total layers (last layer is a half-space).")
 
-    # Default layer resistivities and thicknesses (editable)
     default_rho = [10.0, 30.0, 15.0, 50.0, 100.0][:n_layers]
     default_thk = [2.0, 8.0, 60.0, 120.0][:max(0, n_layers - 1)]
 
-    # Resistivity input per layer
     layer_rhos = []
     for i in range(n_layers):
         layer_rhos.append(
             st.number_input(f"ρ Layer {i+1} (Ω·m)", min_value=0.1, value=float(default_rho[i]), step=0.1)
         )
 
-    # Thickness input for the top N−1 layers (the last layer has infinite thickness)
     thicknesses = []
     if n_layers > 1:
         st.caption("Thicknesses for the **upper** N−1 layers (last layer is half-space):")
@@ -80,150 +70,160 @@ thicknesses = np.r_[thicknesses] if len(thicknesses) else np.array([])
 
 st.divider()
 
-# Convert the list of user-defined resistivities into a NumPy array
-rho = np.r_[layer_rhos]
-
-# “IdentityMap” tells SimPEG that model parameters are already in resistivity units
-rho_map = maps.IdentityMap(nP=len(rho))
-
 # ==============================================================
 # 3) BUILD SURVEY GEOMETRY (AB/2, MN/2 positions)
 # ==============================================================
 
-# Create logarithmically spaced AB/2 electrode spacings (common in field surveys)
 AB2 = np.geomspace(ab2_min, ab2_max, n_stations)
-
-# Define MN/2 spacing automatically (10% of AB/2, limited to avoid overlap)
-MN2 = np.minimum(0.10 * AB2, 0.49 * AB2)
-
-# Small offset epsilon avoids the situation where M = A or N = B (which breaks math)
+MN2 = np.minimum(0.10 * AB2, 0.49 * AB2)   # Schlumberger MN/2
 eps = 1e-6
 
-# Prepare SimPEG “sources” — one per station
-# Each source defines:
-#  - A and B (current electrodes)
-#  - one receiver (M–N dipole measuring potential)
-#1.Schlumberger
-# ---------------------------
+# --- Schlumberger survey ---
+src_list_s = []
+for L, a in zip(AB2, MN2):
+    A_s = np.r_[-L, 0.0, 0.0]
+    B_s = np.r_[+L, 0.0, 0.0]
+    M_s = np.r_[-(a - eps), 0.0, 0.0]
+    N_s = np.r_[+(a - eps), 0.0, 0.0]
 
-src_list_s = []  # we will append one Source per station
-for L,a in zip(AB2,MN2):
-    # DC electrodes in 3D coordinates (x, y, z). We keep everything on x.
-    # A and B are current electrodes; M and N are potential electrodes.
-    # Schlumberger symmetric layout centered at x=0:
-    A_s = np.r_[-L, 0.0, 0.0]            # (NumPy) np.r_ builds 1D arrays quickly
-    B_s = np.r_[ +L, 0.0, 0.0]
-    M_s = np.r_[ -a, 0.0, 0.0]   # subtract eps so M ≠ A exactly
-    N_s = np.r_[ +a, 0.0, 0.0]
-    
-    # Receiver measures potential difference between M and N and asks
-    # SimPEG to return *apparent resistivity* directly.
-    rx_s = dc.receivers.Dipole(M_s, N_s, data_type="apparent_resistivity")  # (SimPEG)
-
-    # Source is a current dipole AB that “owns” this receiver.
-    src_s = dc.sources.Dipole([rx_s], A_s, B_s)  # (SimPEG)
-    
+    rx_s = dc.receivers.Dipole(M_s, N_s, data_type="apparent_resistivity")
+    src_s = dc.sources.Dipole([rx_s], A_s, B_s)
     src_list_s.append(src_s)
 
-# The survey is just the collection of sources (and their receivers).
-survey_s= dc.Survey(src_list_s)  # (SimPEG)
+survey_s = dc.Survey(src_list_s)
 
-# ---------------------------
-# 4) Simulation and forward prediction
-# ---------------------------
-
-# Build a 1D layered forward simulator for DC resistivity with our survey and thicknesses.
-sim_s = dc.simulation_1d.Simulation1DLayers(  # (SimPEG)
-    survey=survey_s,
-    rhoMap=rho_map,
-    thicknesses=thicknesses
-)
-
-# Compute predicted data (apparent resistivity) for the model `rho`.
-rho_app_s = sim_s.dpred(rho)  # (SimPEG) returns array same length as AB2
-
-
-
-
-#2.Wenner
-# ---------------------------
-
-src_list_w = []  # we will append one Source per station
+# --- Wenner survey ---
+src_list_w = []
 for L in AB2:
-    # DC electrodes in 3D coordinates (x, y, z). We keep everything on x.
-    # A and B are current electrodes; M and N are potential electrodes.
-    # Schlumberger symmetric layout centered at x=0:
-    A_w = np.r_[-L, 0.0, 0.0]            # (NumPy) np.r_ builds 1D arrays quickly
-    B_w = np.r_[ +L, 0.0, 0.0]
-    M_w = np.r_[ -L/3, 0.0, 0.0]   # subtract eps so M ≠ A exactly
-    N_w = np.r_[ +L/3, 0.0, 0.0]
-    
-    # Receiver measures potential difference between M and N and asks
-    # SimPEG to return *apparent resistivity* directly.
-    rx_w = dc.receivers.Dipole(M_w, N_w, data_type="apparent_resistivity")  # (SimPEG)
+    # AB = 2L ; Wenner spacing a = AB/3 = 2L/3
+    a = (2.0 * L) / 3.0
+    A_w = np.r_[-1.5 * a, 0.0, 0.0]
+    M_w = np.r_[-0.5 * a, 0.0, 0.0]
+    N_w = np.r_[+0.5 * a, 0.0, 0.0]
+    B_w = np.r_[+1.5 * a, 0.0, 0.0]
 
-    # Source is a current dipole AB that “owns” this receiver.
-    src_w = dc.sources.Dipole([rx_w], A_w, B_w)  # (SimPEG)
-    
+    rx_w = dc.receivers.Dipole(M_w, N_w, data_type="apparent_resistivity")
+    src_w = dc.sources.Dipole([rx_w], A_w, B_w)
     src_list_w.append(src_w)
 
-# The survey is just the collection of sources (and their receivers).
-survey_w= dc.Survey(src_list_w)  # (SimPEG)
+survey_w = dc.Survey(src_list_w)
 
-# ---------------------------
-# 4) Simulation and forward prediction
-# ---------------------------
+# ==============================================================
+# 4) SIMULATION & FORWARD MODELLING
+# ==============================================================
 
-# Build a 1D layered forward simulator for DC resistivity with our survey and thicknesses.
-sim_w = dc.simulation_1d.Simulation1DLayers(  # (SimPEG)
-    survey=survey_w,
+rho = np.r_[layer_rhos]
+rho_map = maps.IdentityMap(nP=len(rho))
+
+sim_s = dc.simulation_1d.Simulation1DLayers(
+    survey=survey_s,
     rhoMap=rho_map,
-    thicknesses=thicknesses
+    thicknesses=thicknesses,
 )
 
-# Run forward simulation: compute apparent resistivity ρa for each AB/2
+sim_w = dc.simulation_1d.Simulation1DLayers(
+    survey=survey_w,
+    rhoMap=rho_map,
+    thicknesses=thicknesses,
+)
+
 try:
-    rho_app_w = sim_w.dpred(rho)   # dpred = “data predicted” by forward model
-    rho_app_s = sim_s.dpred(rho)   # dpred = “data predicted” by forward model
+    rho_app_s = sim_s.dpred(rho)
+    rho_app_w = sim_w.dpred(rho)
     ok = True
 except Exception as e:
     ok = False
     st.error(f"Forward modelling failed: {e}")
 
+
 # ==============================================================
-# 5) DISPLAY RESULTS — curve, model, and data table
+# 4b) SIMPLE LAYER-SENSITIVITY (FOR DEPTH KERNEL)
 # ==============================================================
 
-col1, col2 = st.columns([2, 1])  # layout: wide chart + narrow model panel
+def compute_layer_sensitivity(sim, rho, station_index, rel_perturb=0.01):
+    """
+    Finite-difference sensitivity per layer, for a single datum.
+    Returns an array of length n_layers:
+    sens[j] = | d_i(rho_pert_j) - d_i(rho) |, normalised so max = 1.
+    """
+    base = sim.dpred(rho)
+    n_layers = len(rho)
+    sens = np.zeros(n_layers)
 
-# --- LEFT: Apparent resistivity curve ---
+    for j in range(n_layers):
+        rho_pert = rho.copy()
+        rho_pert[j] *= (1.0 + rel_perturb)
+        d_pert = sim.dpred(rho_pert)
+        sens[j] = d_pert[station_index] - base[station_index]
+
+    sens = np.abs(sens)
+    if sens.max() > 0:
+        sens = sens / sens.max()
+    return sens
+
+
+def build_vertical_kernel(sens_layers, thicknesses, n_layers, n_samples=400):
+    """
+    Expand layer sensitivities into a vertical depth kernel:
+    - each layer sensitivity is taken constant within the layer
+    - last layer is truncated at a plotting depth z_bottom
+    Returns depth (z) and kernel(z).
+    """
+    if len(thicknesses):
+        cum_thk = np.cumsum(thicknesses)           # len = n_layers-1
+        interfaces = np.r_[0.0, cum_thk]           # len = n_layers
+        z_last = interfaces[-1]
+        z_bottom = z_last + max(z_last * 0.3, 10.0)
+        tops_layers = interfaces
+        bottoms_layers = np.r_[cum_thk, z_bottom]
+    else:
+        # single half-space
+        tops_layers = np.array([0.0])
+        bottoms_layers = np.array([10.0])
+        z_bottom = 10.0
+
+    depth = np.linspace(0.0, z_bottom, n_samples)
+    kernel = np.zeros_like(depth)
+
+    for i in range(n_layers):
+        mask = (depth >= tops_layers[i]) & (depth <= bottoms_layers[i])
+        kernel[mask] = sens_layers[i]
+
+    if kernel.max() > 0:
+        kernel = kernel / kernel.max()
+
+    return depth, kernel
+
+# ==============================================================
+# 5) DISPLAY RESULTS — curves, model, and data table
+# ==============================================================
+
+col1, col2 = st.columns([2, 1])
+
+# --- LEFT: Apparent resistivity curves ---
 with col1:
-    st.subheader("Sounding curve (log–log)")
+    st.subheader("Sounding curves (log–log)")
     if ok:
-        # Create a figure using matplotlib
         fig, ax = plt.subplots(figsize=(7, 5))
-        ax.loglog(AB2, rho_app_s, "o-", label="ρₐ (Schlumberger)")
-        ax.loglog(AB2, rho_app_w, "o-", label="ρₐ (Wenner)")
+        ax.loglog(AB2, rho_app_s, "o-", label="Schlumberger")
+        ax.loglog(AB2, rho_app_w, "s--", label="Wenner")
         ax.grid(True, which="both", ls=":")
         ax.set_xlabel("AB/2 (m)")
         ax.set_ylabel("Apparent resistivity (Ω·m)")
-        ax.set_title("Schlumberger & Wenner VES (forward)")
+        ax.set_title("VES forward curves")
         ax.legend()
-
-        # Show it inside Streamlit
         st.pyplot(fig, clear_figure=True)
 
-        # Export results as CSV for external plotting (Excel, Python, etc.)
         df_out = pd.DataFrame({
             "AB/2 (m)": AB2,
-            "MN/2 (m)": MN2,
-            "Apparent resistivity Schlumberger (ohm·m)": rho_app_s,
-            "Apparent resistivity Wenner (ohm·m)": rho_app_w,
+            "MN/2 Schl (m)": MN2,
+            "ρa Schl (ohm·m)": rho_app_s,
+            "ρa Wenner (ohm·m)": rho_app_w,
         })
         st.download_button(
             "⬇️ Download synthetic data (CSV)",
             data=df_out.to_csv(index=False).encode("utf-8"),
-            file_name="synthetic_VES.csv",
+            file_name="synthetic_VES_schl_wenner.csv",
             mime="text/csv",
         )
 
@@ -231,20 +231,16 @@ with col1:
 with col2:
     st.subheader("Layered model")
     if ok:
-        # “Block model” diagram: resistivity vs. depth
         fig2, ax2 = plt.subplots(figsize=(4, 5))
         rho_vals = rho
 
-        # Compute depth interfaces from thicknesses
         if len(thicknesses):
             interfaces = np.r_[0.0, np.cumsum(thicknesses)]
         else:
             interfaces = np.r_[0.0]
 
-        # Add bottom depth for plotting last half-space
         z_bottom = interfaces[-1] + max(interfaces[-1] * 0.3, 10.0)
 
-        # Draw one filled rectangle per layer
         tops = np.r_[interfaces, interfaces[-1]]
         bottoms = np.r_[interfaces[1:], z_bottom]
         for i in range(n_layers):
@@ -252,14 +248,13 @@ with col2:
             ax2.text(rho_vals[i] * 1.05, (tops[i] + bottoms[i]) / 2,
                      f"{rho_vals[i]:.1f} Ω·m", va="center", fontsize=9)
 
-        ax2.invert_yaxis()               # depth increases downward
+        ax2.invert_yaxis()
         ax2.set_xlabel("Resistivity (Ω·m)")
         ax2.set_ylabel("Depth (m)")
         ax2.grid(True, ls=":")
         ax2.set_title("Block model")
         st.pyplot(fig2, clear_figure=True)
 
-    # Display the same model as a table
     model_df = pd.DataFrame({
         "Layer": np.arange(1, n_layers + 1),
         "Resistivity (Ω·m)": rho,
@@ -268,11 +263,75 @@ with col2:
     })
     st.dataframe(model_df, use_container_width=True)
 
+# --------------------------------------------------------------
+# DEPTH-OF-INVESTIGATION KERNEL (replaces old sensitivity plot)
+# --------------------------------------------------------------
+st.divider()
+st.subheader("Depth-of-investigation kernel for a single datum")
+
+if ok:
+    colA, colB = st.columns(2)
+    with colA:
+        array_choice = st.selectbox("Array", ["Schlumberger", "Wenner"])
+    with colB:
+        idx_default = len(AB2) // 2
+        station_index = st.slider(
+            "Station index (0 = smallest AB/2)",
+            0, len(AB2) - 1, idx_default,
+        )
+
+    selected_ab2 = AB2[station_index]
+    st.caption(f"Selected station: #{station_index} – AB/2 = {selected_ab2:.2f} m")
+
+    if array_choice == "Schlumberger":
+        sim_current = sim_s
+    else:
+        sim_current = sim_w
+
+    # 1) layer sensitivities for chosen datum
+    sens_layers = compute_layer_sensitivity(sim_current, rho, station_index)
+
+    # 2) expand into vertical kernel
+    depth, kernel = build_vertical_kernel(sens_layers, thicknesses, n_layers, n_samples=400)
+
+    # 3) effective depth (center of mass) and depth of maximum response
+    if kernel.max() > 0:
+        z_star = depth[np.argmax(kernel)]                    # depth of maximum response
+        z_eff = np.sum(depth * kernel) / np.sum(kernel)      # effective depth
+    else:
+        z_star = 0.0
+        z_eff = 0.0
+
+    # 4) plot kernel
+    fig3, ax3 = plt.subplots(figsize=(5, 4))
+    ax3.fill_betweenx(depth, 0, kernel, alpha=0.3)
+    ax3.plot(kernel, depth, "-")
+
+    # horizontal markers for z_eff and z_star
+    ax3.axhline(z_star, linestyle="--")
+    ax3.axhline(z_eff, linestyle=":")
+
+    ax3.invert_yaxis()
+    ax3.set_xlabel("Relative sensitivity (normalised)")
+    ax3.set_ylabel("Depth (m)")
+    ax3.grid(True, ls=":")
+    ax3.set_title(f"Depth kernel for datum #{station_index} ({array_choice})")
+
+    st.pyplot(fig3, clear_figure=True)
+
+    st.caption(
+        "The curve shows how a single measurement (one AB/2) is sensitive to depth. "
+        "The dashed line marks the depth of **maximum response**; the dotted line marks the "
+        "**effective depth** (sensitivity-weighted average). This is an approximate "
+        "depth-of-investigation kernel built from layer sensitivities."
+    )
+
 # ==============================================================
 # 6) FOOTNOTE — teaching notes
 # ==============================================================
 
 st.caption(
-    "Notes: MN/2 is fixed to 10% of AB/2 (and clipped below 0.5·AB/2) to avoid numerical issues. "
-    "If you see instabilities at extreme geometries, reduce AB/2 range."
+    "MN/2 is fixed to 10% of AB/2 for the Schlumberger array. "
+    "Depth-of-investigation kernels here are simple approximations based on "
+    "finite-difference layer sensitivities, expanded vertically within each layer."
 )
