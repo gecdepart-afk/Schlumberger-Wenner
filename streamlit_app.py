@@ -136,7 +136,7 @@ survey_s= dc.Survey(src_list_s)  # (SimPEG)
 sim_s = dc.simulation_1d.Simulation1DLayers(  # (SimPEG)
     survey=survey_s,
     rhoMap=rho_map,
-    thicknesses=thk
+    thicknesses=thicknesses
 )
 
 # Compute predicted data (apparent resistivity) for the model `rho`.
@@ -178,7 +178,7 @@ survey_w= dc.Survey(src_list_w)  # (SimPEG)
 sim_w = dc.simulation_1d.Simulation1DLayers(  # (SimPEG)
     survey=survey_w,
     rhoMap=rho_map,
-    thicknesses=thk
+    thicknesses=thicknesses
 )
 
 # Run forward simulation: compute apparent resistivity ρa for each AB/2
