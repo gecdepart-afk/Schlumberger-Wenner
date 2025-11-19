@@ -202,12 +202,12 @@ with col1:
     if ok:
         # Create a figure using matplotlib
         fig, ax = plt.subplots(figsize=(7, 5))
-        ax.loglog(AB2, rho_app_s, "o-", label="ρₐ (predicted)")
-        ax.loglog(AB2, rho_app_w, "o-", label="ρₐ (predicted)")
+        ax.loglog(AB2, rho_app_s, "o-", label="ρₐ (Schlumberger)")
+        ax.loglog(AB2, rho_app_w, "o-", label="ρₐ (Wenner)")
         ax.grid(True, which="both", ls=":")
         ax.set_xlabel("AB/2 (m)")
         ax.set_ylabel("Apparent resistivity (Ω·m)")
-        ax.set_title("Schlumberger VES (forward)")
+        ax.set_title("Schlumberger & Wenner VES (forward)")
         ax.legend()
 
         # Show it inside Streamlit
