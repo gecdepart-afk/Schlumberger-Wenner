@@ -1,6 +1,6 @@
 # ==============================
 # 1D DC Forward Modelling (SimPEG)
-# Streamlit app — Schlumberger & Wenner + depth-of-investigation kernel
+# Streamlit app – Schlumberger & Wenner + depth-of-investigation kernel
 # ==============================
 
 # --- Core scientific libraries ---
@@ -19,7 +19,7 @@ from simpeg import maps
 
 st.set_page_config(page_title="1D DC Forward (SimPEG)", page_icon="🪪", layout="wide")
 
-st.title("1D DC Resistivity — Schlumberger & Wenner")
+st.title("1D DC Resistivity – Schlumberger & Wenner")
 st.markdown(
     "Configure a layered Earth and **AB/2** geometry, then compute the **apparent resistivity** "
     "curves for **Schlumberger** and **Wenner** arrays.\n\n"
@@ -27,7 +27,7 @@ st.markdown(
 )
 
 # ==============================================================
-# 2) SIDEBAR — INPUT PARAMETERS (geometry and layer model)
+# 2) SIDEBAR – INPUT PARAMETERS (geometry and layer model)
 # ==============================================================
 
 with st.sidebar:
@@ -137,14 +137,13 @@ except Exception as e:
 
 
 # ==============================================================
-# 4b) SIMPLE LAYER-SENSITIVITY (FOR DEPTH KERNEL)
+# 4b) LAYER SENSITIVITY FOR DEPTH KERNEL
 # ==============================================================
 
 def compute_layer_sensitivity(sim, rho, station_index, rel_perturb=0.01):
     """
     Finite-difference sensitivity per layer, for a single datum.
-    Returns an array of length n_layers:
-    sens[j] = | d_i(rho_pert_j) - d_i(rho) |, normalised so max = 1.
+    sens[j] = | d_i(rho_pert_j) - d_i(rho) |, normalized so max = 1.
     """
     base = sim.dpred(rho)
     n_layers = len(rho)
@@ -195,7 +194,7 @@ def build_vertical_kernel(sens_layers, thicknesses, n_layers, n_samples=400):
     return depth, kernel
 
 # ==============================================================
-# 5) DISPLAY RESULTS — curves, model, and data table
+# 5) DISPLAY RESULTS – curves, model, and data table
 # ==============================================================
 
 col1, col2 = st.columns([2, 1])
@@ -294,40 +293,47 @@ if ok:
     # 2) expand into vertical kernel
     depth, kernel = build_vertical_kernel(sens_layers, thicknesses, n_layers, n_samples=400)
 
-    # 3) effective depth (center of mass) and depth of maximum response
+    # 3) effective depth and depth of maximum response
     if kernel.max() > 0:
-        z_star = depth[np.argmax(kernel)]                    # depth of maximum response
+        z_star = depth[np.argmax(kernel)]                    # depth of maximum sensitivity
         z_eff = np.sum(depth * kernel) / np.sum(kernel)      # effective depth
     else:
         z_star = 0.0
         z_eff = 0.0
 
-    # 4) plot kernel
+    # 4) plot kernel with Z* and Z_E annotated
     fig3, ax3 = plt.subplots(figsize=(5, 4))
-    ax3.fill_betweenx(depth, 0, kernel, alpha=0.3)
+    ax3.fill_betweenx(depth, 0, kernel, alpha=0.3, label="Sensitivity kernel")
     ax3.plot(kernel, depth, "-")
 
-    # horizontal markers for z_eff and z_star
-    ax3.axhline(z_star, linestyle="--")
-    ax3.axhline(z_eff, linestyle=":")
+    # horizontal markers
+    ax3.axhline(z_star, linestyle="--", color="C1", label="Z* (max sensitivity)")
+    ax3.axhline(z_eff, linestyle=":", color="C2", label="Z_E (effective depth)")
+
+    # small text labels on the right side
+    x_text = 1.02 * kernel.max() if kernel.max() > 0 else 1.0
+    ax3.text(x_text, z_star, "Z*", va="center", ha="left", color="C1")
+    ax3.text(x_text, z_eff, "Z_E", va="center", ha="left", color="C2")
 
     ax3.invert_yaxis()
     ax3.set_xlabel("Relative sensitivity (normalised)")
     ax3.set_ylabel("Depth (m)")
     ax3.grid(True, ls=":")
     ax3.set_title(f"Depth kernel for datum #{station_index} ({array_choice})")
-
+    ax3.legend(loc="upper right")
     st.pyplot(fig3, clear_figure=True)
 
     st.caption(
-        "The curve shows how a single measurement (one AB/2) is sensitive to depth. "
-        "The dashed line marks the depth of **maximum response**; the dotted line marks the "
-        "**effective depth** (sensitivity-weighted average). This is an approximate "
-        "depth-of-investigation kernel built from layer sensitivities."
+        f"For AB/2 = {selected_ab2:.2f} m:\n"
+        f"• Z* (depth of maximum sensitivity) ≈ {z_star:.1f} m\n"
+        f"• Z_E (effective depth of investigation) ≈ {z_eff:.1f} m\n\n"
+        "The kernel shows how a single apparent-resistivity measurement is sensitive to depth. "
+        "Z* marks the depth where the response is strongest; Z_E is the sensitivity-weighted "
+        "average depth, often used as an effective investigation depth."
     )
 
 # ==============================================================
-# 6) FOOTNOTE — teaching notes
+# 6) FOOTNOTE – teaching notes
 # ==============================================================
 
 st.caption(
