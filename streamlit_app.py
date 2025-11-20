@@ -1,6 +1,6 @@
 # ==============================
 # 1D DC Forward Modelling (SimPEG)
-# Streamlit app — Schlumberger only, user edits AB/2 only
+# Streamlit app — Schlumberger + Wenner
 # ==============================
 
 # --- Core scientific libraries ---
@@ -13,17 +13,18 @@ import streamlit as st                # Streamlit: web UI framework for Python (
 from simpeg.electromagnetics.static import resistivity as dc  # SimPEG DC resistivity subpackage
 from simpeg import maps               # “maps” connect model parameters to physical quantities
 
+from matplotlib.ticker import LogLocator, LogFormatter, NullFormatter
+
 # ---------------------------
 # 1) PAGE SETUP & HEADER
 # ---------------------------
 
-# Configure the web app: title, icon, and layout
 st.set_page_config(page_title="1D DC Forward (SimPEG)", page_icon="🪪", layout="wide")
 
-# Title and description displayed at the top of the app
-st.title("1D DC Resistivity — Forward Modelling (Schlumberger)")
+st.title("1D DC Resistivity — Forward Modelling (Schlumberger vs Wenner)")
 st.markdown(
-    "Configure a layered Earth and **AB/2** geometry, then compute the **apparent resistivity** curve. "
+    "Configure a layered Earth and **AB/2** geometry, then compute the **apparent resistivity** curves "
+    "for both **Schlumberger** and **Wenner** arrays. "
     "Uses `simpeg.electromagnetics.static.resistivity.simulation_1d.Simulation1DLayers`."
 )
 
@@ -31,147 +32,204 @@ st.markdown(
 # 2) SIDEBAR — INPUT PARAMETERS (geometry and layer model)
 # ==============================================================
 
-with st.sidebar:   # everything inside here appears in the Streamlit sidebar
-    st.header("Geometry (Schlumberger)")
+with st.sidebar:
+    st.header("Geometry (AB/2 range)")
 
-    # --- AB/2 range controls (geometry setup) ---
-    # Two side-by-side numeric inputs: minimum and maximum AB/2 electrode spacing
+    # AB/2 min / max
     colA1, colA2 = st.columns(2)
     with colA1:
-        ab2_min = st.number_input("AB/2 min (m)", min_value=0.1, value=5.0, step=0.1, format="%.2f")
+        ab2_min = st.number_input(
+            "AB/2 min (m)", min_value=0.1, value=5.0, step=0.1, format="%.2f"
+        )
     with colA2:
-        ab2_max = st.number_input("AB/2 max (m)", min_value=ab2_min + 0.1, value=300.0, step=1.0, format="%.2f")
+        ab2_max = st.number_input(
+            "AB/2 max (m)", min_value=ab2_min + 0.1, value=300.0, step=1.0, format="%.2f"
+        )
 
-    # Number of measurement stations between AB2_min and AB2_max
-    n_stations = st.slider("Number of stations", min_value=8, max_value=60, value=25, step=1)
+    n_stations = st.slider(
+        "Number of stations", min_value=8, max_value=60, value=25, step=1
+    )
 
-    # Fix MN/2 to a standard ratio (10% of AB/2)
-    st.caption("MN/2 is set automatically to 10% of AB/2 (and clipped to < 0.5·AB/2).")
+    st.caption(
+        "**Schlumberger:** MN/2 is set automatically to 10% of AB/2 "
+        "(and clipped so MN/2 < 0.5·AB/2).  \n"
+        "**Wenner:** AB = 3a, MN = a, centred at x = 0."
+    )
 
     st.divider()
     st.header("Layers")
 
-    # --- Layer parameters (resistivity + thickness) ---
-    # Choose number of layers (3–5). The last one is the infinite half-space.
-    n_layers = st.slider("Number of layers", 3, 5, 4, help="Total layers (last layer is a half-space).")
+    # Number of layers
+    n_layers = st.slider(
+        "Number of layers", 3, 5, 4,
+        help="Total layers (last layer is a half-space)."
+    )
 
-    # Default layer resistivities and thicknesses (editable)
+    # Default resistivities & thicknesses
     default_rho = [10.0, 30.0, 15.0, 50.0, 100.0][:n_layers]
     default_thk = [2.0, 8.0, 60.0, 120.0][:max(0, n_layers - 1)]
 
-    # Resistivity input per layer
+    # Resistivities
     layer_rhos = []
     for i in range(n_layers):
         layer_rhos.append(
-            st.number_input(f"ρ Layer {i+1} (Ω·m)", min_value=0.1, value=float(default_rho[i]), step=0.1)
+            st.number_input(
+                f"ρ Layer {i+1} (Ω·m)",
+                min_value=0.1,
+                value=float(default_rho[i]),
+                step=0.1,
+            )
         )
 
-    # Thickness input for the top N−1 layers (the last layer has infinite thickness)
+    # Thicknesses for first N−1 layers
     thicknesses = []
     if n_layers > 1:
         st.caption("Thicknesses for the **upper** N−1 layers (last layer is half-space):")
         for i in range(n_layers - 1):
             thicknesses.append(
-                st.number_input(f"Thickness L{i+1} (m)", min_value=0.1, value=float(default_thk[i]), step=0.1)
+                st.number_input(
+                    f"Thickness L{i+1} (m)",
+                    min_value=0.1,
+                    value=float(default_thk[i]),
+                    step=0.1,
+                )
             )
 
-# Convert thickness list to numpy array (SimPEG expects NumPy arrays, not Python lists)
+# Convert thickness to NumPy array
 thicknesses = np.r_[thicknesses] if len(thicknesses) else np.array([])
 
 st.divider()
 
 # ==============================================================
-# 3) BUILD SURVEY GEOMETRY (AB/2, MN/2 positions)
+# 3) BUILD SURVEY GEOMETRY (Schlumberger + Wenner)
 # ==============================================================
 
-# Create logarithmically spaced AB/2 electrode spacings (common in field surveys)
+# AB/2 stations
 AB2 = np.geomspace(ab2_min, ab2_max, n_stations)
 
-# Define MN/2 spacing automatically (10% of AB/2, limited to avoid overlap)
+# Schlumberger: MN/2 = 0.1 * AB/2 (clipped)
 MN2 = np.minimum(0.10 * AB2, 0.49 * AB2)
 
-# Small offset epsilon avoids the situation where M = A or N = B (which breaks math)
 eps = 1e-6
 
-# Prepare SimPEG “sources” — one per station
-# Each source defines:
-#  - A and B (current electrodes)
-#  - one receiver (M–N dipole measuring potential)
-src_list = []
-for L, a in zip(AB2, MN2):
-    # Positions of electrodes along the x-axis (y,z = 0)
-    A = np.r_[-L, 0.0, 0.0]
-    B = np.r_[ +L, 0.0, 0.0]
-    M = np.r_[ -(a - eps), 0.0, 0.0]
-    N = np.r_[ +(a - eps), 0.0, 0.0]
+# ---------------- Schlumberger survey ----------------
+src_list_s = []
+for L, a_s in zip(AB2, MN2):
+    # Current electrodes A,B
+    A_s = np.r_[-L, 0.0, 0.0]
+    B_s = np.r_[+L, 0.0, 0.0]
 
-    # Receiver measures apparent resistivity directly
-    rx = dc.receivers.Dipole(M, N, data_type="apparent_resistivity")
+    # Potential electrodes M,N near centre
+    M_s = np.r_[-(a_s - eps), 0.0, 0.0]
+    N_s = np.r_[+(a_s - eps), 0.0, 0.0]
 
-    # Source = AB current dipole carrying this receiver
-    src = dc.sources.Dipole([rx], A, B)
-    src_list.append(src)
+    rx_s = dc.receivers.Dipole(M_s, N_s, data_type="apparent_resistivity")
+    src_s = dc.sources.Dipole([rx_s], A_s, B_s)
+    src_list_s.append(src_s)
 
-# Create the SimPEG survey object from all sources
-survey = dc.Survey(src_list)
+survey_s = dc.Survey(src_list_s)
+
+# ---------------- Wenner survey ----------------
+# Wenner: A–M–N–B equally spaced by a.
+# AB = 3a, AB/2 = 1.5a; we use AB/2 = L → a = (2/3)*L
+src_list_w = []
+for L in AB2:
+    a_w = (2.0 / 3.0) * L
+
+    A_w = np.r_[-1.5 * a_w, 0.0, 0.0]
+    M_w = np.r_[-0.5 * a_w, 0.0, 0.0]
+    N_w = np.r_[+0.5 * a_w, 0.0, 0.0]
+    B_w = np.r_[+1.5 * a_w, 0.0, 0.0]
+
+    rx_w = dc.receivers.Dipole(M_w, N_w, data_type="apparent_resistivity")
+    src_w = dc.sources.Dipole([rx_w], A_w, B_w)
+    src_list_w.append(src_w)
+
+survey_w = dc.Survey(src_list_w)
 
 # ==============================================================
 # 4) SIMULATION & FORWARD MODELLING
 # ==============================================================
 
-# Convert the list of user-defined resistivities into a NumPy array
 rho = np.r_[layer_rhos]
-
-# “IdentityMap” tells SimPEG that model parameters are already in resistivity units
 rho_map = maps.IdentityMap(nP=len(rho))
 
-# Create a 1D layered-earth DC resistivity simulation
-sim = dc.simulation_1d.Simulation1DLayers(
-    survey=survey,           # measurement geometry
-    rhoMap=rho_map,          # how model is interpreted
-    thicknesses=thicknesses  # array of thicknesses for upper layers
+# Schlumberger simulation
+sim_s = dc.simulation_1d.Simulation1DLayers(
+    survey=survey_s,
+    rhoMap=rho_map,
+    thicknesses=thicknesses,
 )
 
-# Run forward simulation: compute apparent resistivity ρa for each AB/2
+# Wenner simulation
+sim_w = dc.simulation_1d.Simulation1DLayers(
+    survey=survey_w,
+    rhoMap=rho_map,
+    thicknesses=thicknesses,
+)
+
 try:
-    rho_app = sim.dpred(rho)   # dpred = “data predicted” by forward model
+    rho_app_s = sim_s.dpred(rho)
+    rho_app_w = sim_w.dpred(rho)
     ok = True
 except Exception as e:
     ok = False
     st.error(f"Forward modelling failed: {e}")
 
 # ==============================================================
-# 5) DISPLAY RESULTS — curve, model, and data table
+# 5) DISPLAY RESULTS — curves, model, and data table
 # ==============================================================
 
-col1, col2 = st.columns([2, 1])  # layout: wide chart + narrow model panel
+col1, col2 = st.columns([2, 1])
 
-# --- LEFT: Apparent resistivity curve ---
+# --- LEFT: Apparent resistivity curves ---
 with col1:
-    st.subheader("Sounding curve (log–log)")
+    st.subheader("Sounding curves (log–log)")
     if ok:
-        # Create a figure using matplotlib
         fig, ax = plt.subplots(figsize=(7, 5))
-        ax.loglog(AB2, rho_app, "o-", label="ρₐ (predicted)")
-        ax.grid(True, which="both", ls=":")
+
+        # Two arrays on same AB/2 axis
+        ax.loglog(AB2, rho_app_s, "o-", label="Schlumberger ρₐ")
+        ax.loglog(AB2, rho_app_w, "s--", label="Wenner ρₐ")
+
+        # Y-limits to full decades around both curves
+        ymin = np.minimum(rho_app_s.min(), rho_app_w.min())
+        ymax = np.maximum(rho_app_s.max(), rho_app_w.max())
+        ymin = 10 ** np.floor(np.log10(ymin))
+        ymax = 10 ** np.ceil(np.log10(ymax))
+        ax.set_ylim(ymin, ymax)
+
+        # Ticks only at decades
+        ax.yaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
+        ax.yaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1))
+        ax.yaxis.set_major_formatter(LogFormatter(base=10.0, labelOnlyBase=True))
+        ax.yaxis.set_minor_formatter(NullFormatter())
+
+        ax.xaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0,)))
+        ax.xaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1))
+        ax.xaxis.set_major_formatter(LogFormatter(base=10.0, labelOnlyBase=True))
+        ax.xaxis.set_minor_formatter(NullFormatter())
+
+        ax.grid(True, which="both", ls=":", alpha=0.7)
+
         ax.set_xlabel("AB/2 (m)")
         ax.set_ylabel("Apparent resistivity (Ω·m)")
-        ax.set_title("Schlumberger VES (forward)")
+        ax.set_title("Schlumberger vs Wenner — 1D VES (forward)")
         ax.legend()
 
-        # Show it inside Streamlit
         st.pyplot(fig, clear_figure=True)
 
-        # Export results as CSV for external plotting (Excel, Python, etc.)
+        # Export both arrays in a single CSV
         df_out = pd.DataFrame({
             "AB/2 (m)": AB2,
-            "MN/2 (m)": MN2,
-            "Apparent resistivity (ohm·m)": rho_app,
+            "MN/2 Schlumberger (m)": MN2,
+            "ρa Schlumberger (Ω·m)": rho_app_s,
+            "ρa Wenner (Ω·m)": rho_app_w,
         })
         st.download_button(
             "⬇️ Download synthetic data (CSV)",
             data=df_out.to_csv(index=False).encode("utf-8"),
-            file_name="synthetic_VES.csv",
+            file_name="synthetic_VES_Schlumberger_Wenner.csv",
             mime="text/csv",
         )
 
@@ -179,40 +237,43 @@ with col1:
 with col2:
     st.subheader("Layered model")
     if ok:
-        # “Block model” diagram: resistivity vs. depth
         fig2, ax2 = plt.subplots(figsize=(4, 5))
         rho_vals = rho
 
-        # Compute depth interfaces from thicknesses
+        # Depth interfaces
         if len(thicknesses):
             interfaces = np.r_[0.0, np.cumsum(thicknesses)]
         else:
             interfaces = np.r_[0.0]
 
-        # Add bottom depth for plotting last half-space
         z_bottom = interfaces[-1] + max(interfaces[-1] * 0.3, 10.0)
 
-        # Draw one filled rectangle per layer
         tops = np.r_[interfaces, interfaces[-1]]
         bottoms = np.r_[interfaces[1:], z_bottom]
+
         for i in range(n_layers):
             ax2.fill_betweenx([tops[i], bottoms[i]], 0, rho_vals[i], alpha=0.35)
-            ax2.text(rho_vals[i] * 1.05, (tops[i] + bottoms[i]) / 2,
-                     f"{rho_vals[i]:.1f} Ω·m", va="center", fontsize=9)
+            ax2.text(
+                rho_vals[i] * 1.05,
+                (tops[i] + bottoms[i]) / 2,
+                f"{rho_vals[i]:.1f} Ω·m",
+                va="center",
+                fontsize=9,
+            )
 
-        ax2.invert_yaxis()               # depth increases downward
+        ax2.invert_yaxis()
         ax2.set_xlabel("Resistivity (Ω·m)")
         ax2.set_ylabel("Depth (m)")
         ax2.grid(True, ls=":")
         ax2.set_title("Block model")
         st.pyplot(fig2, clear_figure=True)
 
-    # Display the same model as a table
+    # Model as table
     model_df = pd.DataFrame({
         "Layer": np.arange(1, n_layers + 1),
         "Resistivity (Ω·m)": rho,
-        "Thickness (m)": [*thicknesses, np.nan],  # NaN for last layer (half-space)
-        "Note": [""] * (n_layers - 1) + ["Half-space"]
+        "Thickness (m)": [*thicknesses, np.nan],
+        "Note": [""] * (n_layers - 1) + ["Half-space"],
     })
     st.dataframe(model_df, use_container_width=True)
 
@@ -221,6 +282,7 @@ with col2:
 # ==============================================================
 
 st.caption(
-    "Notes: MN/2 is fixed to 10% of AB/2 (and clipped below 0.5·AB/2) to avoid numerical issues. "
-    "If you see instabilities at extreme geometries, reduce AB/2 range."
+    "Notes: for Schlumberger, MN/2 is fixed to 10% of AB/2 (and clipped below 0.5·AB/2) to avoid "
+    "numerical issues and electrode overlap. Wenner uses AB = 3a, MN = a, centred at x = 0. "
+    "If you see instabilities at extreme geometries, reduce the AB/2 range or number of stations."
 )
