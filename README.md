@@ -1,4 +1,4 @@
-# :earth_americas: GDP dashboard template
+# :earth_americas: Wenner-Schlumberger
 
 A simple Streamlit app showing the difference between Schlumberger and Wenner arrays
 
