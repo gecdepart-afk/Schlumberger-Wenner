@@ -1,4 +1,4 @@
-# :earth_americas: Wenner-Schlumberger
+🧑‍🚀 Wenner-Schlumberger
 
 A simple Streamlit app showing the difference between Schlumberger and Wenner arrays
 
