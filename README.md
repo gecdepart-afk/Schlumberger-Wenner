@@ -2,7 +2,7 @@
 
 A simple Streamlit app showing the difference between Schlumberger and Wenner arrays
 
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://gdp-dashboard-template.streamlit.app/)
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://schlumberger-wenner123.streamlit.app)
 
 ### How to run it on your own machine
 
