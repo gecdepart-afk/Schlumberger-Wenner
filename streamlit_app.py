@@ -17,37 +17,36 @@ from simpeg import maps
 # 1) PAGE SETUP & HEADER
 # ---------------------------
 
-st.set_page_config(page_title="1D DC Forward (SimPEG)", page_icon="🪪", layout="wide")
+st.set_page_config(page_title="1D DC Forward (SimPEG)", page_icon="⚡", layout="wide")
 
-# ---------------------------
-# CUSTOM DARK THEME OVERRIDE
-# ---------------------------
-dark_style = """
+# ---------- CUSTOM GREY THEME (text white, background grey) ----------
+custom_style = """
 <style>
-/* GLOBAL BACKGROUND */
+/* MAIN APP BACKGROUND + TEXT */
 body, .stApp {
-    background-color: #000000 !important;
-    color: white !important;
+    background-color: #202124 !important;  /* dark grey */
+    color: #FFFFFF !important;            /* white text */
 }
 
-/* TEXT OVERRIDES */
-h1, h2, h3, h4, h5, h6, p, label, span, div, .css-10trblm, .css-1d391kg {
-    color: white !important;
+/* GENERAL TEXT ELEMENTS */
+h1, h2, h3, h4, h5, h6,
+p, label, span, div {
+    color: #FFFFFF !important;
 }
 
-/* SIDE BAR */
+/* SIDEBAR BACKGROUND + TEXT */
 section[data-testid="stSidebar"] {
-    background-color: #111111 !important;
+    background-color: #171717 !important;  /* slightly darker grey */
 }
 section[data-testid="stSidebar"] * {
-    color: white !important;
+    color: #FFFFFF !important;
 }
 
-/* INPUT FIELDS */
+/* INPUT FIELDS (number_input, text_input, selectbox, etc.) */
 input, textarea, select {
-    background-color: #222222 !important;
-    color: white !important;
-    border: 1px solid #444444 !important;
+    background-color: #2A2A2A !important;
+    color: #FFFFFF !important;
+    border: 1px solid #555555 !important;
 }
 
 /* SLIDERS */
@@ -55,30 +54,30 @@ input, textarea, select {
     background: #444444 !important;
 }
 [data-baseweb="slider"] [role="slider"] {
-    background: #888888 !important;
+    background: #BBBBBB !important;
 }
 
-/* DOWNLOAD BUTTONS */
-.stDownloadButton button {
-    background-color: #222222 !important;
-    color: white !important;
-    border: 1px solid white !important;
+/* BUTTONS (e.g. download button) */
+.stDownloadButton button, button[kind="secondary"], button[kind="primary"] {
+    background-color: #333333 !important;
+    color: #FFFFFF !important;
+    border: 1px solid #FFFFFF !important;
 }
 
-/* RADIO / SELECTBOX */
-.css-1n543e5, .css-q8sbsg {
-    background-color: #222222 !important;
-    color: white !important;
-}
-
-/* DATAFRAME BACKGROUND */
+/* DATAFRAME TEXT */
 .dataframe {
-    color: white !important;
+    color: #FFFFFF !important;
+}
+
+/* EXPANDER / CARDS (if any) */
+div[role="dialog"], .stAlert, .stDataFrame {
+    background-color: #202124 !important;
+    color: #FFFFFF !important;
 }
 </style>
 """
-
-st.markdown(dark_style, unsafe_allow_html=True)
+st.markdown(custom_style, unsafe_allow_html=True)
+# ---------------------------------------------------------------------
 
 st.title("1D DC Resistivity – Schlumberger & Wenner")
 st.markdown(
@@ -324,7 +323,7 @@ with col2:
     st.dataframe(model_df, use_container_width=True)
 
 # --------------------------------------------------------------
-# DEPTH-OF-INVESTIGATION KERNEL (replaces old sensitivity plot)
+# DEPTH-OF-INVESTIGATION KERNEL
 # --------------------------------------------------------------
 st.divider()
 st.subheader("Depth-of-investigation kernel for a single datum")
