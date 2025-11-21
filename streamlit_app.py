@@ -16,7 +16,30 @@ from simpeg import maps
 # ---------------------------
 # 1) PAGE SETUP & HEADER
 # ---------------------------
+# ---------- CUSTOM THEME OVERRIDE (grey background + white text) ----------
+st.markdown(
+    """
+    <style>
+    /* Main page */
+    [data-testid="stAppViewContainer"] {
+        background-color: #2f3437;  /* medium grey */
+        color: #ffffff;             /* white text */
+    }
 
+    /* Sidebar */
+    [data-testid="stSidebar"] {
+        background-color: #1f2528;  /* darker grey */
+        color: #ffffff;
+    }
+
+    /* Make headers and normal text white */
+    h1, h2, h3, h4, h5, h6, p, span, label {
+        color: #ffffff !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 st.set_page_config(page_title="1D DC Forward (SimPEG)", page_icon="⚡", layout="wide")
 
 # ---------------------------
