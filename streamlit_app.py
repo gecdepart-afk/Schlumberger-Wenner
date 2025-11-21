@@ -19,65 +19,68 @@ from simpeg import maps
 
 st.set_page_config(page_title="1D DC Forward (SimPEG)", page_icon="⚡", layout="wide")
 
-# ---------- CUSTOM GREY THEME (text white, background grey) ----------
-custom_style = """
+# ---------------------------
+# CUSTOM GREY THEME (forced)
+# ---------------------------
+grey_style = """
 <style>
-/* MAIN APP BACKGROUND + TEXT */
-body, .stApp {
-    background-color: #202124 !important;  /* dark grey */
-    color: #FFFFFF !important;            /* white text */
+
+/* MAIN APP BACKGROUND */
+html, body, .stApp {
+    background-color: #2b2b2b !important;   /* nice medium grey */
+    color: #f0f0f0 !important;               /* soft white text */
 }
 
-/* GENERAL TEXT ELEMENTS */
+/* HEADERS + TEXT */
 h1, h2, h3, h4, h5, h6,
-p, label, span, div {
-    color: #FFFFFF !important;
+p, span, label, div, section {
+    color: #f0f0f0 !important;
 }
 
-/* SIDEBAR BACKGROUND + TEXT */
+/* SIDEBAR */
 section[data-testid="stSidebar"] {
-    background-color: #171717 !important;  /* slightly darker grey */
+    background-color: #242424 !important;  /* darker grey */
+    color: #f0f0f0 !important;
 }
 section[data-testid="stSidebar"] * {
-    color: #FFFFFF !important;
+    color: #f0f0f0 !important;
 }
 
-/* INPUT FIELDS (number_input, text_input, selectbox, etc.) */
+/* INPUTS */
 input, textarea, select {
-    background-color: #2A2A2A !important;
-    color: #FFFFFF !important;
-    border: 1px solid #555555 !important;
+    background-color: #3a3a3a !important;
+    color: #ffffff !important;
+    border: 1px solid #666666 !important;
 }
 
 /* SLIDERS */
 [data-baseweb="slider"] > div {
-    background: #444444 !important;
+    background: #555555 !important;   /* slider track */
 }
 [data-baseweb="slider"] [role="slider"] {
-    background: #BBBBBB !important;
+    background: #cccccc !important;   /* slider thumb */
 }
 
-/* BUTTONS (e.g. download button) */
-.stDownloadButton button, button[kind="secondary"], button[kind="primary"] {
-    background-color: #333333 !important;
-    color: #FFFFFF !important;
-    border: 1px solid #FFFFFF !important;
+/* DOWNLOAD BUTTON */
+.stDownloadButton button {
+    background-color: #3a3a3a !important;
+    color: white !important;
+    border: 1px solid #bbbbbb !important;
 }
 
-/* DATAFRAME TEXT */
+/* DATAFRAME */
 .dataframe {
-    color: #FFFFFF !important;
+    color: white !important;
 }
 
-/* EXPANDER / CARDS (if any) */
-div[role="dialog"], .stAlert, .stDataFrame {
-    background-color: #202124 !important;
-    color: #FFFFFF !important;
+/* MATPLOTLIB FIGURES (optional darker frame) */
+figure {
+    background-color: #2b2b2b !important;
 }
+
 </style>
 """
-st.markdown(custom_style, unsafe_allow_html=True)
-# ---------------------------------------------------------------------
+st.markdown(grey_style, unsafe_allow_html=True)
 
 st.title("1D DC Resistivity – Schlumberger & Wenner")
 st.markdown(
