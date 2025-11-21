@@ -19,6 +19,67 @@ from simpeg import maps
 
 st.set_page_config(page_title="1D DC Forward (SimPEG)", page_icon="🪪", layout="wide")
 
+# ---------------------------
+# CUSTOM DARK THEME OVERRIDE
+# ---------------------------
+dark_style = """
+<style>
+/* GLOBAL BACKGROUND */
+body, .stApp {
+    background-color: #000000 !important;
+    color: white !important;
+}
+
+/* TEXT OVERRIDES */
+h1, h2, h3, h4, h5, h6, p, label, span, div, .css-10trblm, .css-1d391kg {
+    color: white !important;
+}
+
+/* SIDE BAR */
+section[data-testid="stSidebar"] {
+    background-color: #111111 !important;
+}
+section[data-testid="stSidebar"] * {
+    color: white !important;
+}
+
+/* INPUT FIELDS */
+input, textarea, select {
+    background-color: #222222 !important;
+    color: white !important;
+    border: 1px solid #444444 !important;
+}
+
+/* SLIDERS */
+[data-baseweb="slider"] > div {
+    background: #444444 !important;
+}
+[data-baseweb="slider"] [role="slider"] {
+    background: #888888 !important;
+}
+
+/* DOWNLOAD BUTTONS */
+.stDownloadButton button {
+    background-color: #222222 !important;
+    color: white !important;
+    border: 1px solid white !important;
+}
+
+/* RADIO / SELECTBOX */
+.css-1n543e5, .css-q8sbsg {
+    background-color: #222222 !important;
+    color: white !important;
+}
+
+/* DATAFRAME BACKGROUND */
+.dataframe {
+    color: white !important;
+}
+</style>
+"""
+
+st.markdown(dark_style, unsafe_allow_html=True)
+
 st.title("1D DC Resistivity – Schlumberger & Wenner")
 st.markdown(
     "Configure a layered Earth and **AB/2** geometry, then compute the **apparent resistivity** "
